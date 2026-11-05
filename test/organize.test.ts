@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setImmediate as nextTick } from 'node:timers/promises';
 import { setFlagsFromString } from 'node:v8';
@@ -347,13 +347,21 @@ describe('job control', () => {
 });
 
 /** Tags a file through the whole flow, then changes it, so the next run asks again. */
+/** Saves over the bytes of an open file. `writeFile` would delete the tag stream on Windows. */
+async function saveInPlace(name: string, text: string) {
+  const file = await open(at(name), 'r+');
+  await file.truncate(0);
+  await file.write(text, 0);
+  await file.close();
+}
+
 async function organizedThenEdited(tags: string[] = []) {
   await writeFile(at('a.txt'), 'first');
   if (tags.length > 0) await writeTags(at('a.txt'), tags);
   await scan();
   const { plan_id: id } = await organize();
   await waitForJob((await callTool('apply_plan', { id: id! }, ctx)).id);
-  await writeFile(at('a.txt'), 'second');
+  await saveInPlace('a.txt', 'second');
   await scan();
 }
 
@@ -467,7 +475,7 @@ describe('provenance', () => {
     const first = await organize();
     await waitForJob((await callTool('apply_plan', { id: first.plan_id! }, ctx)).id);
 
-    await writeFile(at('a.txt'), 'second version');
+    await saveInPlace('a.txt', 'second version');
     await scan();
     mock.doDecide = answering('receipt');
     const second = await organize();

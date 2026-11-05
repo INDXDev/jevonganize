@@ -24,8 +24,9 @@ the operating system stores on the file. You see every change as a plan first, a
 
 It writes tags only. It never moves, renames, edits or deletes a file.
 
-**Status: early.** Version 0.1.0 is not released, and the package is not on npm yet. macOS is the only
-platform anything has run on. The Linux and Windows code has never been tested.
+**Status: early.** Version 0.1.0 is not released, and the package is not on npm yet. The test suite
+passes in CI on macOS, Ubuntu and Windows Server, with real tag writes on each. That proves test
+behaviour only: Explorer, Dolphin and packaged Linux and Windows apps have not been tried.
 
 <!-- Screenshots: docs/assets/screenshots/browser.png and friends go here once they exist. -->
 

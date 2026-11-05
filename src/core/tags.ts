@@ -2,8 +2,8 @@
  * The only OS boundary: every read and write of a file's tags. Identical on every OS, and only the
  * `backends` table differs. See docs/tags.md.
  *
- * The `linux` and `win32` backends have never been executed on those systems. test/tags.test.ts
- * runs their logic here, against a fake libc and against sibling files, and nothing more.
+ * CI runs each backend on its own OS, against the real store: test/tags.test.ts reads the attribute
+ * or stream back. That covers Windows Server NTFS and the runners' Linux volume, and no file manager.
  */
 import { randomUUID } from 'node:crypto';
 import type { BigIntStats } from 'node:fs';
@@ -190,6 +190,12 @@ const win32: Backend = {
     restoreTimes(path, before);
   },
 };
+
+/**
+ * True where saving over a file drops its tags with the file id unchanged. `CREATE_ALWAYS`, which is
+ * `fopen(path, "w")`, deletes every stream, so only a changed `mtime` tells this from a person.
+ */
+export const overwriteDropsTags = process.platform === 'win32';
 
 const backends: Partial<Record<NodeJS.Platform, Backend>> = { darwin, linux, win32 };
 const backend = backends[process.platform];

@@ -9,7 +9,7 @@ import type { Tag } from '../types.ts';
 import type { Config } from './config.ts';
 import { ifExists, paths, UserError } from './config.ts';
 import type { Db, FileRecord, Fingerprint, MirrorTag } from './db.ts';
-import { readTags } from './tags.ts';
+import { overwriteDropsTags, readTags } from './tags.ts';
 
 const BATCH = 256;
 
@@ -201,7 +201,7 @@ function record(db: Db, { now, row, tags }: Observation, result: ScanResult, see
   seen.add(id);
 
   const { added, removed } = db.syncFileTags(id, tags);
-  result.restores += recordRemoved(db, id, removed, replaced);
+  result.restores += recordRemoved(db, id, removed, replaced || (edited && overwriteDropsTags));
   db.dropRestored(id, tags);
 
   if (!row) result.added++;

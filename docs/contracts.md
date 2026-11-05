@@ -104,6 +104,7 @@ writeTags(path: string, tags: Tag[]): Promise<void>   // replaces the set; [] cl
 supported(path: string): Promise<boolean>             // can this volume store tags?
 isScreenCapture(path: string): boolean                // macOS attribute; false elsewhere
 normalize(tags: Tag[]): Tag[]
+overwriteDropsTags: boolean                           // saving over a file loses its tags; true on Windows
 ```
 
 ## Extraction: `extract/`

@@ -11,13 +11,13 @@ import { useTempHome } from './helpers.ts';
 const home = useTempHome();
 let db: Db;
 
-/** These tests write POSIX paths. The index holds the OS's own, and folder queries depend on it. */
+/** Most tests here take a path as an opaque key. Folders and base names need the OS's own form. */
 const native = (path: string) => path.replaceAll('/', sep);
 
 const addFile = (path: string, size = 1, mtimeMs = 1000) =>
   db.upsertFile(
     {
-      path: native(path),
+      path,
       dev: '1',
       ino: path,
       size,
@@ -166,8 +166,8 @@ describe('libraries', () => {
   it('counts files, stamps scans and is idempotent', () => {
     db.addLibrary(native('/lib'));
     db.addLibrary(native('/lib'));
-    addFile('/lib/a');
-    addFile('/lib-other/b');
+    addFile(native('/lib/a'));
+    addFile(native('/lib-other/b'));
     db.markScanned(native('/lib'));
     const [library] = db.listLibraries();
     expect(library?.files).toBe(1);
@@ -177,8 +177,8 @@ describe('libraries', () => {
   it('removing one forgets its files, but not those inside another library', () => {
     db.addLibrary(native('/lib'));
     db.addLibrary(native('/lib/inner'));
-    addFile('/lib/a');
-    const inner = addFile('/lib/inner/b');
+    addFile(native('/lib/a'));
+    const inner = addFile(native('/lib/inner/b'));
     db.removeLibrary(native('/lib'));
     expect(db.fileByPath(native('/lib/a'))).toBeUndefined();
     expect(db.fileById(inner)).toBeDefined();
@@ -308,9 +308,9 @@ describe('searchFiles', () => {
   });
 
   it('scopes to a folder, not a sibling with the same prefix', () => {
-    addFile('/lib/a');
-    addFile('/lib/sub/b');
-    addFile('/lib-2/c');
+    addFile(native('/lib/a'));
+    addFile(native('/lib/sub/b'));
+    addFile(native('/lib-2/c'));
     expect(found({ folder: '/lib' })).toEqual(['/lib/a', '/lib/sub/b']);
     expect(found({ folder: '/lib/' })).toEqual(['/lib/a', '/lib/sub/b']);
   });
@@ -347,16 +347,16 @@ describe('searchFiles', () => {
   });
 
   it('sorts by base name, size and time, and pages', () => {
-    addFile('/z/a', 3, 1000);
-    addFile('/a/C', 1, 3000);
-    addFile('/m/b', 2, 2000);
+    addFile(native('/z/a'), 3, 1000);
+    addFile(native('/a/C'), 1, 3000);
+    addFile(native('/m/b'), 2, 2000);
     expect(found({})).toEqual(['/z/a', '/m/b', '/a/C']);
     expect(found({ sort: 'name', order: 'desc' })).toEqual(['/a/C', '/m/b', '/z/a']);
     expect(found({ sort: 'size' })).toEqual(['/z/a', '/m/b', '/a/C']);
     expect(found({ sort: 'modified', order: 'asc' })).toEqual(['/z/a', '/m/b', '/a/C']);
     expect(db.searchFiles({ limit: 1, offset: 1 })).toMatchObject({
       total: 3,
-      files: [{ path: '/m/b' }],
+      files: [{ path: native('/m/b') }],
     });
   });
 });
@@ -386,9 +386,9 @@ describe('tags', () => {
   });
 
   it('counts tags, by folder and by facet', () => {
-    tagged('/lib/a', ['doc-type:invoice', 'plain']);
-    tagged('/lib/b', ['doc-type:invoice']);
-    tagged('/other/c', ['plain']);
+    tagged(native('/lib/a'), ['doc-type:invoice', 'plain']);
+    tagged(native('/lib/b'), ['doc-type:invoice']);
+    tagged(native('/other/c'), ['plain']);
     db.setTagFacets([{ id: 'doc-type', weight: 1.5 }]);
     expect(db.tagCounts()).toEqual([
       { tag: 'doc-type:invoice', facet: 'doc-type', count: 2 },

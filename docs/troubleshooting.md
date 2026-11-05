@@ -3,8 +3,9 @@
 Start with `jevonganize doctor`. It checks the runtime, your key, each library's volume and optional
 tools.
 
-Linux and Windows behaviour below comes from documentation, not from testing, unless noted. Please
-report what you find.
+CI runs the test suite with real tag writes on Ubuntu and Windows Server. Anything else about Linux and
+Windows below comes from documentation unless noted, including Explorer, Dolphin and packaged apps.
+Please report what you find.
 
 ## Tags not visible
 
@@ -78,14 +79,17 @@ Other operations also drop tags:
 | | `git clone`, `git checkout` |
 | | Node's `fs.copyFile` and `fs.cp` |
 
-On Windows, tags survive a copy from NTFS to NTFS. They are lost by email, upload, zip, or a copy to
-FAT or exFAT. See [tags.md](tags.md#lost-tags).
+On Windows, tags survive Node's `fs.copyFile` and `fs.cp` from NTFS to NTFS (tested in CI), and an
+Explorer copy is reported to keep them. They are lost by email, upload, zip, or a copy to FAT or exFAT.
+Unlike on macOS, a plain save that recreates the file also loses them (tested in CI), and the next scan
+adds `restore` items. See [tags.md](tags.md#lost-tags).
 
 ## Backup tools react to tagged files on Windows
 
-Writing a stream updates a file's modified time on Windows. Jevonganize restores it after each write,
-but `ctime` still moves, and the restored time may differ slightly. A tool that watches either may
-process the file again. This is unverified. See [tags.md](tags.md#windows-file-times).
+Writing a stream updates a file's modified time on Windows. Jevonganize restores it exactly after each
+write (tested in CI), but `ctime` still moves, and the file still raises a change event. A tool that
+watches either may process the file again. No real backup tool was tried. See
+[tags.md](tags.md#windows-file-times).
 
 ## Node version
 

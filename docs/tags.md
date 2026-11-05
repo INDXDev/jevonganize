@@ -5,8 +5,9 @@ truth. `core/tags.ts` is the only module that reads or writes them, and its inte
 every OS. See [contracts](contracts.md#tags-coretagsts).
 
 **Test status.** The macOS behaviour below was tested on macOS 14 with APFS, HFS+, exFAT and FAT32.
-The Linux and Windows backends have never been run. Their behaviour comes from documentation and is
-unverified until they run in CI.
+CI also runs the real backends on `ubuntu-latest` and on `windows-latest` (Windows Server 2025, NTFS):
+tags are written, read back and removed there, and "tested in CI" below means exactly that. CI proves
+test behaviour only. Explorer, Dolphin, Baloo and packaged Windows and Linux apps are unverified.
 
 ## Grammar
 
@@ -69,7 +70,8 @@ An empty set deletes the attribute or stream.
   `NSURLTagNamesKey` is documented. It has been stable, and Dropbox depends on it, but Apple
   promises nothing.
 - **Linux:** `user.xdg.tags` is a KDE convention, not a specification.
-- **Windows:** streams need NTFS or ReFS. Paths must be absolute.
+- **Windows:** streams need NTFS or ReFS. Paths must be absolute. Paths past `MAX_PATH` work (tested
+  in CI).
 
 `supported(path)` writes a throwaway probe file once per volume and reads it back. The result differs
 by OS even for one file system: exFAT works on macOS through `._` sidecar files, and is expected to
@@ -84,7 +86,7 @@ Be clear about this before relying on it.
 | Environment | Tags in the file manager | OS search |
 | --- | --- | --- |
 | macOS Finder | Yes. Reads through `NSURL`, `mdls` and Spotlight were tested. The Finder window itself was not visually checked | Yes, through Spotlight. Case-sensitive by default |
-| Linux, KDE Dolphin | Yes, expected. `/` nests tags under `tags:/`, with open bugs on deep nesting | Baloo |
+| Linux, KDE Dolphin | Yes, expected, not tested. `/` nests tags under `tags:/`, with open bugs on deep nesting | Baloo |
 | Linux, GNOME Files | **No. Shows nothing.** GNOME has no user tags | No |
 | Windows Explorer | **No. Shows nothing, on any file.** Windows Search cannot find them either | No |
 
@@ -107,7 +109,7 @@ Linux loses them in practice.
 
 | Action | macOS | Linux | Windows |
 | --- | --- | --- | --- |
-| Rename or move, same volume | Kept (tested) | Kept (expected) | Kept (expected) |
+| Rename or move, same volume | Kept (tested) | Kept (expected) | Kept (tested in CI) |
 | `cp`, `ditto`, Finder copy | Kept by `cp` and `ditto` (tested). Lost by `cp -X` | Lost unless `cp --preserve=xattr` (not tested) | Explorer copy, NTFS to NTFS: reported kept |
 | Copy to exFAT or FAT | Kept in a `._` sidecar (tested). Lost if only the main file is taken elsewhere | Lost: no xattrs there | Lost, after a warning from Explorer (reported) |
 | `rsync` | Kept with `-aE`, lost with `-a` (tested) | Needs `-X` (not tested) | Not applicable |
@@ -115,9 +117,10 @@ Linux loses them in practice.
 | `zip`, then `unzip` | **Lost** (tested). `ditto -c -k` then `ditto -x -k` keeps them | Expected lost | **Lost** (reported) |
 | Email or upload | Expected lost | Expected lost | **Lost** (reported) |
 | `git clone` or checkout | **Lost** (tested). Git stores no attributes | Expected lost | Expected lost |
-| Save by writing a temp file and renaming | **Lost** (tested, also `sed -i`) | Expected lost | Depends on the app. Those using `ReplaceFile` keep streams |
-| Save in place | Kept (tested) | Expected kept | Expected kept |
-| Node `fs.copyFile`, `fs.cp` | **Lost** (tested) | Not tested | Not tested |
+| Save by writing a temp file and renaming | **Lost** (tested, also `sed -i`) | Expected lost | **Lost** with a plain rename (tested in CI). Those using `ReplaceFile` are reported to keep streams |
+| Save over the open file's bytes | Kept (tested) | Expected kept | Kept (tested in CI) |
+| Save by recreating the file (`fopen(path, "w")`, Node `fs.writeFile`) | Kept (tested) | Expected kept | **Lost** (tested in CI). `CREATE_ALWAYS` deletes every stream and keeps the file id |
+| Node `fs.copyFile`, `fs.cp` | **Lost** (tested) | Not tested | Kept (tested in CI) |
 
 Sync services were not tested.
 
@@ -179,7 +182,11 @@ later organize of that file can propose the tag again. It would appear in a plan
 ## Lost tags
 
 Many apps save by writing a temp file and renaming it over the original. That gives the file a new
-inode and drops its tags, on macOS at least. How many real apps do this was not measured.
+inode and drops its tags, on macOS and Windows at least. How many real apps do this was not measured.
+
+On Windows a plain save loses tags too: recreating a file with `CREATE_ALWAYS` deletes every stream and
+keeps the file id. So there, a changed `mtime` or size with fewer tags counts as a new inode below.
+Removing only the stream never moves `mtime`, so that still reads as a person's choice.
 
 A scan handles a path that already has a row in the index like this:
 
@@ -202,19 +209,19 @@ any tags.
 
 ## Windows file times
 
-On Windows, any stream write updates the file's modified time. That would trigger backup and sync
-tools, and make every tagged file look edited.
+On Windows, writing a stream updates the file's modified time, and removing one does not (both tested
+in CI). That would trigger backup and sync tools, and make every tagged file look edited.
 
-So after a stream write, `core/tags.ts` restores the time:
+So after a stream write or removal, `core/tags.ts` restores the time:
 
-1. `stat` the file before the write.
-2. Write the stream.
-3. Call `fs.utimes` with the old `atime` and `mtime`.
+1. `stat` the file before the write, as `bigint`.
+2. Write or remove the stream.
+3. Call `SetFileTime` with the old `atime` and `mtime`.
 4. `stat` again, and store that result as the fingerprint.
 
-Step 4 matters because `fs.utimes` does not keep full precision, so the stored `mtime` may differ
-slightly from the original. `ctime` still moves. macOS leaves `mtime` alone, and Linux is expected to.
-This is unverified on Windows.
+Step 3 is not `fs.utimes`, which takes milliseconds. Windows keeps 100 ns ticks, so `utimes` cut the
+time short, and the file looked edited to `apply_plan` and to the next scan. `mtime` now comes back to
+the tick (tested in CI). `ctime` still moves. macOS and Linux leave `mtime` alone.
 
 ## Change detection
 
@@ -222,8 +229,8 @@ A tag write changes `ctime` and not `mtime` on macOS. That shapes everything her
 
 | | macOS | Linux | Windows |
 | --- | --- | --- | --- |
-| `mtime` on a tag write | Unchanged (tested) | Unchanged (expected) | Changes, then restored |
-| `ctime` on a tag write | Changes (tested) | Changes (expected) | Expected to change |
+| `mtime` on a tag write | Unchanged (tested) | Unchanged (tested in CI) | Changes, then restored exactly (tested in CI) |
+| `ctime` on a tag write | Changes (tested) | Changes (tested in CI) | Changes (tested in CI) |
 | Event source | FSEvents | inotify `IN_ATTRIB` | `ReadDirectoryChangesW` |
 
 **Why `fs.watch`.** Built-in `fs.watch` reports every xattr change on macOS (tested). chokidar compares
@@ -242,7 +249,10 @@ the similarity numbers, which rewrites every file's weight and so cannot run per
 
 The walk is required. inotify needs a watch per directory and misses remote changes,
 `ReadDirectoryChangesW` can drop events, and `fs.watch` is unreliable on network file systems.
-`fs.watch` on Linux and Windows is untested here.
+
+`fs.watch` picked up tag writes on Linux and Windows in CI, on local volumes. Windows reports them as
+`change` on the file itself, never naming the stream. It reports a stream written by another program,
+but **no event at all when another program removes a stream**. Only the walk sees that, through `ctime`.
 
 A changed `ctime` means "read again", not "tags changed". It also moves on `chmod` and hard links,
 which is harmless.

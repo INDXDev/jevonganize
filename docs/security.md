@@ -232,8 +232,8 @@ Keys in environment variables are ignored until you allow them, then they take p
 ### Windows
 
 `chmod` is close to a no-op on Windows, so `0600` means nothing there. The file relies on the default
-permissions of your user profile, which normally limit it to you, administrators and the system. This
-was not tested.
+permissions of your user profile, which normally limit it to you, administrators and the system. CI
+confirmed that the modes do not apply. The profile's permissions were not tested.
 
 The config directory is under `%APPDATA%`, which roams. On a managed machine with roaming profiles,
 `credentials.toml` may be copied to a server. If that matters, use environment keys from a secrets
@@ -326,7 +326,7 @@ These close the weak spots found in Jevlint, the project this one borrows from.
   excluded by name.
 - Tags and index text are not encrypted. Anyone with access to your user account can read them.
 - The token URL and cookie protect against web pages, not against other software running as you.
-- Linux and Windows behaviour has not been run. See [research](research/os-file-tags.md).
+- On Linux and Windows only the test suite has run, in CI. See [tags.md](tags.md).
 
 ## Reporting a vulnerability
 

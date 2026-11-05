@@ -12,7 +12,10 @@ First version, not released yet.
 - Write tags only after a person applies a plan, and undo any plan. Files are never moved, renamed,
   edited or deleted.
 - Tags live on the files: Finder tags on macOS, `user.xdg.tags` on Linux, and one NTFS stream on
-  Windows. Linux and Windows have not been tested.
+  Windows. CI runs real tag writes on Ubuntu and Windows Server. Explorer, Dolphin and packaged Linux
+  and Windows apps have not been tested.
+- On Windows, a save that recreates a file deletes its tag stream. The next scan raises `restore`
+  items for those tags, as it does for a save by rename.
 - 10 packs of preset facets, and custom facets in TOML. A `level` step named `none` writes no tag, and
   `visibility` says whether a file is public.
 - Providers: OpenAI (recommended), TypeSafe Jev, Cloudflare Clef, OpenRouter, Vercel AI Gateway,

@@ -1,5 +1,16 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, rename, stat, symlink, unlink, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  cp,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import bplist from 'bplist-creator';
@@ -272,6 +283,9 @@ async function times(path: string) {
 }
 const tick = () => new Promise((done) => setTimeout(done, 20));
 
+/** Reads the raw xattr with another program, so this test does not check tags.ts against itself. */
+const READ_XATTR = `import os, sys; sys.stdout.buffer.write(os.getxattr(sys.argv[1], 'user.xdg.tags'))`;
+
 describe.runIf(process.platform === 'win32')('tags on this Windows volume', () => {
   it('stores, reads and removes a real stream, and leaves the content alone', async () => {
     expect(await supported(home())).toBe(true);
@@ -316,11 +330,46 @@ describe.runIf(process.platform === 'win32')('tags on this Windows volume', () =
     expect((await times(deep)).mtimeNs).toBe(before.mtimeNs);
   });
 
-  it('keeps tags through a rename', async () => {
+  it('moves mtime on a raw stream write and not on a raw removal, as docs/tags.md says', async () => {
+    const before = await times(file);
+    await tick();
+    await writeFile(stream(), 'a');
+    const written = await times(file);
+    expect(written.mtimeNs).toBeGreaterThan(before.mtimeNs);
+    await tick();
+    await unlink(stream());
+    const removed = await times(file);
+    expect(removed.mtimeNs).toBe(written.mtimeNs);
+    expect(removed.ctimeNs).toBeGreaterThan(written.ctimeNs);
+  });
+
+  it('keeps tags through a rename and Node copies', async () => {
     await writeTags(file, ['a']);
     const moved = join(home(), 'moved.txt');
     await rename(file, moved);
     expect(await readTags(moved)).toEqual(['a']);
+    const copied = join(home(), 'copied.txt');
+    await copyFile(moved, copied);
+    expect(await readTags(copied)).toEqual(['a']);
+    const recursive = join(home(), 'recursive.txt');
+    await cp(moved, recursive);
+    expect(await readTags(recursive)).toEqual(['a']);
+  });
+
+  it('keeps tags through a save in place, and loses them to an overwrite or a rename over', async () => {
+    await writeTags(file, ['a']);
+    const handle = await open(file, 'r+');
+    await handle.write('X', 0);
+    await handle.close();
+    expect(await readTags(file)).toEqual(['a']);
+    const { ino } = await stat(file, { bigint: true });
+    await writeFile(file, 'saved over');
+    expect(await readTags(file)).toEqual([]);
+    expect((await stat(file, { bigint: true })).ino).toBe(ino);
+    await writeTags(file, ['a']);
+    await writeFile(`${file}.new`, 'saved');
+    await rename(`${file}.new`, file);
+    expect(await readTags(file)).toEqual([]);
   });
 
   it('does not follow a symlink', async () => {
@@ -333,5 +382,24 @@ describe.runIf(process.platform === 'win32')('tags on this Windows volume', () =
   it('throws for a missing file rather than reading it as untagged', async () => {
     await unlink(file);
     await expect(readTags(file)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});
+
+describe.runIf(process.platform === 'linux')('tags on this Linux volume', () => {
+  it('stores, reads and removes the xattr, with mtime kept and ctime moved', async () => {
+    expect(await supported(home())).toBe(true);
+    const before = await times(file);
+    await tick();
+    await writeTags(file, ['山田', 'a']);
+    const written = await times(file);
+    expect(execFileSync('python3', ['-c', READ_XATTR, file]).toString()).toBe('a,山田');
+    expect(await readTags(file)).toEqual(['a', '山田']);
+    expect(written.mtimeNs).toBe(before.mtimeNs);
+    expect(written.ctimeNs).toBeGreaterThan(before.ctimeNs);
+    await writeTags(file, []);
+    expect(await readTags(file)).toEqual([]);
+    expect(() => execFileSync('python3', ['-c', READ_XATTR, file], { stdio: 'ignore' })).toThrow(
+      'Command failed',
+    );
   });
 });

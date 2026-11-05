@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -87,8 +88,11 @@ beforeEach(async () => {
   await mkdir(root);
 });
 
-afterEach(() => {
-  child?.kill();
+afterEach(async () => {
+  if (!child || child.exitCode !== null) return;
+  const closed = once(child, 'close'); // on Windows a live process keeps the temp home from being deleted
+  child.kill();
+  await closed;
 });
 
 test('lists exactly the agent tools, with read-only hints', async () => {

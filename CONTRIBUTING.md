@@ -33,8 +33,8 @@ CI runs `pnpm check` on macOS, Ubuntu and Windows, because tag writing differs p
 fails if a check rewrote a tracked file. A separate job on macOS runs the Playwright tests and a smoke
 test of the packed tarball.
 
-Only macOS has been run so far, so a first failure on Linux or Windows may be a real bug in code no one
-has exercised. Please report what you find.
+CI is the only place Linux and Windows have run, so it proves test behaviour and no more. Explorer,
+Dolphin and packaged apps there are untried. Please report what you find.
 
 ## Principles
 

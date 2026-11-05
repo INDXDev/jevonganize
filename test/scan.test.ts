@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmod, mkdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, rename, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configSchema, paths, UserError } from '../src/core/config.ts';
@@ -201,6 +201,37 @@ describe('fingerprints', () => {
     expect(db.fileTags(id)).toEqual([{ tag: 'outside', ai: false }]);
     expect(db.fileById(id)).toMatchObject({ status: 'organized', hash: 'h' });
   });
+
+  // Windows only: elsewhere an overwrite keeps the attribute, and streams exist only there.
+  it.runIf(process.platform === 'win32')(
+    'an overwrite that drops the stream raises restore items, and is no person',
+    async () => {
+      const path = await put('a.txt');
+      await writeTags(path, ['kept', 'ai']);
+      await scan();
+      const id = db.fileByPath(path)!.id;
+      db.addFileTags(id, ['ai'], true);
+      await tick();
+      await writeFile(path, 'saved over');
+      expect((await scan()).restores).toBe(2);
+      expect(db.fileTags(id)).toEqual([]);
+      expect(db.rejectedTags(id)).toEqual([]);
+    },
+  );
+
+  // Windows only: this is a raw stream removal, which moves ctime and no other time.
+  it.runIf(process.platform === 'win32')(
+    'sees a stream another program removed, by ctime',
+    async () => {
+      const path = await put('a.txt');
+      await writeTags(path, ['a']);
+      await scan();
+      await tick();
+      await unlink(`${path}:jevonganize.tags`);
+      expect((await scan()).changed).toBe(1);
+      expect(db.fileTags(db.fileByPath(path)!.id)).toEqual([]);
+    },
+  );
 
   it('a content change resets the status', async () => {
     const path = await put('a.txt');

@@ -7,7 +7,7 @@ import { UserError } from './config.ts';
 import type { Db, FileRecord } from './db.ts';
 import { tagFacet } from './facets.ts';
 import { recordRemoved, recordWrite } from './scan.ts';
-import { FORBIDDEN, normalize, readTags, writeTags } from './tags.ts';
+import { FORBIDDEN, normalize, overwriteDropsTags, readTags, writeTags } from './tags.ts';
 
 /** What a flow gets from the job running it. */
 export interface JobRun {
@@ -130,15 +130,16 @@ async function mergeWrite(
   if (changed) await writeTags(file.path, merged);
   const info = await lstat(file.path, { bigint: true });
   const now = { ino: String(info.ino), size: Number(info.size), mtime_ns: String(info.mtimeNs) };
+  const edited = contentStamp(now) !== contentStamp(file);
   // The file was edited behind the index. A new fingerprint would hide that from the next scan.
-  if (changed && contentStamp(now) === contentStamp(file)) await recordWrite(db, file.path);
+  if (changed && !edited) await recordWrite(db, file.path);
   db.transaction(() => {
     db.addFileTags(file.id, add, change.ai);
     db.removeFileTags(file.id, remove);
     const { removed } = db.syncFileTags(file.id, merged);
     // The scan will not see these go, as the mirror has just caught up, so they are handled here.
     const missing = removed.filter(({ tag }) => !change.remove.includes(tag));
-    recordRemoved(db, file.id, missing, now.ino !== file.ino);
+    recordRemoved(db, file.id, missing, now.ino !== file.ino || (edited && overwriteDropsTags));
   });
   return { add, remove };
 }
