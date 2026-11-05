@@ -34,9 +34,17 @@ export const workerPool = () =>
 
 /** Runs one export of worker.ts, terminating its worker after `timeoutMs`. */
 export const runTask = <T>(name: string, input: unknown, timeoutMs: number): Promise<T> =>
-  limit(
-    () => workerPool().run(input, { name, signal: AbortSignal.timeout(timeoutMs) }) as Promise<T>,
-  );
+  limit(async () => {
+    const controller = new AbortController();
+    // Not `AbortSignal.timeout`, whose timer is unref'd. A worker that dies while starting leaves its
+    // task waiting with nothing else alive, and Node would exit mid-job instead of failing the file.
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return (await workerPool().run(input, { name, signal: controller.signal })) as T;
+    } finally {
+      clearTimeout(timer);
+    }
+  });
 
 function failure(path: string, size: number, warning: string): FileState & { mime: string } {
   const type = mime.getType(path) ?? 'application/octet-stream';

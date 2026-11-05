@@ -1,13 +1,14 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { readTags } from '../src/core/tags.ts';
 import { callTool, openContext, tools, waitForJob } from '../src/core/tools.ts';
 import type { Plan } from '../src/types.ts';
 import { useTempHome } from './helpers.ts';
 
-const CLI = new URL('../src/cli.ts', import.meta.url).pathname;
+const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
 vi.setConfig({ testTimeout: 30_000 }); // each test starts a real process
 

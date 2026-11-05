@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { paths, UserError } from '../src/core/config.ts';
 import { openDb } from '../src/core/db.ts';
@@ -11,10 +11,13 @@ import { useTempHome } from './helpers.ts';
 const home = useTempHome();
 let db: Db;
 
+/** These tests write POSIX paths. The index holds the OS's own, and folder queries depend on it. */
+const native = (path: string) => path.replaceAll('/', sep);
+
 const addFile = (path: string, size = 1, mtimeMs = 1000) =>
   db.upsertFile(
     {
-      path,
+      path: native(path),
       dev: '1',
       ino: path,
       size,
@@ -31,7 +34,9 @@ const tagged = (path: string, tags: string[]) => {
 };
 
 const found = (query: Parameters<Db['searchFiles']>[0]) =>
-  db.searchFiles(query).files.map((file) => file.path);
+  db
+    .searchFiles({ ...query, folder: query.folder && native(query.folder) })
+    .files.map((file) => file.path.replaceAll(sep, '/'));
 
 const item = (file_id: number, tag: string, confidence: number | null = 0.6) =>
   ({ file_id, kind: 'suggest', tag, confidence, reason: 'r' }) as const;
@@ -86,6 +91,7 @@ describe('openDb', () => {
     const raw = new DatabaseSync(paths.database());
     expect(raw.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
     raw.close();
+    if (process.platform === 'win32') return; // POSIX modes do not exist there
     expect((await stat(join(home(), 'data'))).mode & 0o777).toBe(0o700);
   });
 
@@ -158,23 +164,23 @@ describe('transaction', () => {
 
 describe('libraries', () => {
   it('counts files, stamps scans and is idempotent', () => {
-    db.addLibrary('/lib');
-    db.addLibrary('/lib');
+    db.addLibrary(native('/lib'));
+    db.addLibrary(native('/lib'));
     addFile('/lib/a');
     addFile('/lib-other/b');
-    db.markScanned('/lib');
+    db.markScanned(native('/lib'));
     const [library] = db.listLibraries();
     expect(library?.files).toBe(1);
     expect(library?.scanned_at).toBeGreaterThan(0);
   });
 
   it('removing one forgets its files, but not those inside another library', () => {
-    db.addLibrary('/lib');
-    db.addLibrary('/lib/inner');
+    db.addLibrary(native('/lib'));
+    db.addLibrary(native('/lib/inner'));
     addFile('/lib/a');
     const inner = addFile('/lib/inner/b');
-    db.removeLibrary('/lib');
-    expect(db.fileByPath('/lib/a')).toBeUndefined();
+    db.removeLibrary(native('/lib'));
+    expect(db.fileByPath(native('/lib/a'))).toBeUndefined();
     expect(db.fileById(inner)).toBeDefined();
   });
 });
@@ -388,7 +394,7 @@ describe('tags', () => {
       { tag: 'doc-type:invoice', facet: 'doc-type', count: 2 },
       { tag: 'plain', facet: null, count: 2 },
     ]);
-    expect(db.tagCounts({ folder: '/other' }).map((row) => row.tag)).toEqual(['plain']);
+    expect(db.tagCounts({ folder: native('/other') }).map((row) => row.tag)).toEqual(['plain']);
     expect(db.tagCounts({ facet: 'doc-type' })).toHaveLength(1);
     expect(db.filesWithTag('plain')).toHaveLength(2);
   });

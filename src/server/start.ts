@@ -54,7 +54,14 @@ export async function startServer(options: { port?: number; browser?: boolean } 
   const server = createAdaptorServer({
     fetch: (request: Request) => handler?.(request) ?? new Response(null, { status: 503 }),
   }) as Server;
-  const port = await bind(server, options.port ?? ctx.config.port, options.port !== undefined);
+  const port = await bind(
+    server,
+    options.port ?? ctx.config.port,
+    options.port !== undefined,
+  ).catch((error: unknown) => {
+    ctx.db.close();
+    throw error;
+  });
   const token = randomBytes(32).toString('hex');
   const created = createApp(ctx, port, token);
   publish = created.publish;

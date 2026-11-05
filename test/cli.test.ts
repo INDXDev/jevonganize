@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { nodeSupported } from '../src/commands/floor.ts';
@@ -11,7 +12,7 @@ import { readTags, writeTags } from '../src/core/tags.ts';
 import type { Estimate, Job, Plan } from '../src/types.ts';
 import { useTempHome } from './helpers.ts';
 
-const CLI = new URL('../src/cli.ts', import.meta.url).pathname;
+const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
 vi.setConfig({ testTimeout: 60_000 }); // each step spawns a real process
 
@@ -143,17 +144,21 @@ describe('scan and read', () => {
     expect(jobs.at(-1)).toMatchObject({ kind: 'scan', status: 'done' });
   });
 
-  test('a hostile name is safe in text output, and kept in --json', async () => {
-    const name = 'x\x1b]0;pwned\x07.txt';
-    await writeFile(join(root, name), 'hello');
-    await cli(['scan', root]);
-    const text = await cli(['search', '--folder', root]);
-    expect(text.stdout).not.toContain('\x1b');
-    expect(text.stdout).toContain('x?]0;pwned?.txt');
-    const json = await cli(['search', '--folder', root, '--json']);
-    const { files } = JSON.parse(json.stdout) as { files: { name: string }[] };
-    expect(files[0]?.name).toBe(name);
-  });
+  // Windows refuses control characters in file names, so this name cannot exist there.
+  test.skipIf(process.platform === 'win32')(
+    'a hostile name is safe in text output, and kept in --json',
+    async () => {
+      const name = 'x\x1b]0;pwned\x07.txt';
+      await writeFile(join(root, name), 'hello');
+      await cli(['scan', root]);
+      const text = await cli(['search', '--folder', root]);
+      expect(text.stdout).not.toContain('\x1b');
+      expect(text.stdout).toContain('x?]0;pwned?.txt');
+      const json = await cli(['search', '--folder', root, '--json']);
+      const { files } = JSON.parse(json.stdout) as { files: { name: string }[] };
+      expect(files[0]?.name).toBe(name);
+    },
+  );
 
   test('a file not in the index suggests scan, and a plain id works', async () => {
     const miss = await cli(['show', join(root, 'none.txt')]);
@@ -260,8 +265,10 @@ describe('settings', () => {
   });
 
   test('config edit saves a valid file and never an invalid one', async () => {
-    const editor = join(home(), 'edit.sh');
-    await writeFile(editor, '#!/bin/sh\nprintf "$CONTENT" > "$1"\n', { mode: 0o755 });
+    const script = join(home(), 'edit.mjs');
+    const write = `import { writeFileSync as w } from 'node:fs'; w(process.argv[2], process.env.CONTENT);`;
+    await writeFile(script, write);
+    const editor = `${process.execPath} ${script}`; // Node, as Windows cannot run a shell script
     const good = await cli(['config', 'edit'], {
       env: { VISUAL: editor, CONTENT: 'concurrency = 3\n' },
     });
@@ -515,6 +522,7 @@ describe('the server', () => {
       child.once('close', done);
     });
     child.kill('SIGTERM');
-    expect(await closed).toBe(0);
+    // Windows has no signals: `kill` ends the process at once, so no handler runs and no code is set.
+    expect(await closed).toBe(process.platform === 'win32' ? null : 0);
   });
 });

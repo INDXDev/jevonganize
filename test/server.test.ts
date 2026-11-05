@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { callTool, type Context, openContext, waitForJob } from '../src/core/tools.ts';
 import { createApp, parseRange, webRoot } from '../src/server/app.ts';
@@ -244,7 +246,7 @@ describe('startServer', () => {
     await callTool('set_config', { port: 48722, watch: { enabled: false } }, ctx);
     const preload =
       'data:text/javascript,process.parentPort={postMessage(m){console.log(JSON.stringify(m))}}';
-    const start = new URL('../src/server/start.ts', import.meta.url).pathname;
+    const start = fileURLToPath(new URL('../src/server/start.ts', import.meta.url));
     const child = spawn(process.execPath, ['--import', preload, start], {
       env: { ...process.env, JEVONGANIZE_HOME: home() },
     });
@@ -254,6 +256,7 @@ describe('startServer', () => {
       });
     });
     child.kill();
+    await once(child, 'close'); // on Windows a live process keeps the temp home from being deleted
     expect(message.port).toBe(48722);
     expect(message.token).toMatch(/^[0-9a-f]{64}$/);
   }, 30_000);

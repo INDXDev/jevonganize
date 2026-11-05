@@ -143,6 +143,7 @@ async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
 /** Decodes a picture. SVG goes in as bytes, so that it has no base path to reach sibling files. */
 export async function picture(path: string, mime: string): Promise<Sharp> {
   const { default: sharp } = await import('sharp');
+  sharp.cache(false); // its cache keeps a decoded file open, which on Windows locks the user's file
   if (mime === 'image/svg+xml') return sharp(await readFile(path));
   if (!mime.startsWith('image/hei')) return sharp(path);
   // @ts-expect-error heic-decode ships no types

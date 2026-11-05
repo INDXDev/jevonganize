@@ -1,9 +1,8 @@
 /** What every command shares: output, flags, and waiting for jobs. Only this layer prints. */
-import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve, sep } from 'node:path';
+import { sep } from 'node:path';
 import type { Command } from 'commander';
-import { UserError } from '../core/config.ts';
+import { indexedPath, UserError } from '../core/config.ts';
 import { sanitize, sanitizeLine } from '../core/sanitize.ts';
 import { callTool, type Context, openContext, waitForJob } from '../core/tools.ts';
 import type { Estimate, FileQuery, Job, Plan } from '../types.ts';
@@ -24,15 +23,6 @@ export const note = (text = '') => void process.stderr.write(`${sanitize(text)}\
 /** Prints a value with its original text. `--json` output is untrusted by contract. */
 export const outJson = (value: unknown) =>
   void process.stdout.write(`${JSON.stringify(value ?? null)}\n`);
-
-/** A path as the index holds it: libraries are stored by real path, and a gone file has none. */
-export function indexedPath(path: string): string {
-  try {
-    return realpathSync(resolve(path));
-  } catch {
-    return resolve(path);
-  }
-}
 
 /** A path for a table: one line, and short. */
 export function shown(path: string): string {

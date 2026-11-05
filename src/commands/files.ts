@@ -2,7 +2,7 @@
 import { stat } from 'node:fs/promises';
 import { sep } from 'node:path';
 import type { Command } from 'commander';
-import { ifExists, UserError } from '../core/config.ts';
+import { ifExists, indexedPath, UserError } from '../core/config.ts';
 import { sanitizeLine } from '../core/sanitize.ts';
 import { callTool, type Context } from '../core/tools.ts';
 import type { FileQuery, Plan, ReviewItem } from '../types.ts';
@@ -15,7 +15,6 @@ import {
   count,
   fileArg,
   follow,
-  indexedPath,
   type JsonFlag,
   note,
   out,

@@ -6,8 +6,9 @@
  * runs their logic here, against a fake libc and against sibling files, and nothing more.
  */
 import { randomUUID } from 'node:crypto';
-import { lstat, readFile, rm, stat, unlink, utimes, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join } from 'node:path';
+import type { BigIntStats } from 'node:fs';
+import { lstat, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, toNamespacedPath } from 'node:path';
 import { getSystemErrorName } from 'node:util';
 import bplist from 'bplist-creator';
 import { parseBuffer } from 'bplist-parser';
@@ -137,6 +138,44 @@ function stream(path: string): string {
   return `${path}:jevonganize.tags`;
 }
 
+// Windows keeps 100 ns ticks and `fs.utimes` takes milliseconds, so it cannot put a time back.
+const kernel32 = process.platform === 'win32' ? koffi.load('kernel32.dll') : null;
+const fileApi = kernel32 && {
+  open: kernel32.func(
+    'intptr_t __stdcall CreateFileW(const char16_t *p, uint32_t access, uint32_t share, void *sa, uint32_t mode, uint32_t flags, void *tpl)',
+  ),
+  setTimes: kernel32.func(
+    'int __stdcall SetFileTime(intptr_t h, const uint8_t *created, const uint8_t *accessed, const uint8_t *written)',
+  ),
+  close: kernel32.func('int __stdcall CloseHandle(intptr_t h)'),
+};
+const FILE_WRITE_ATTRIBUTES = 0x100;
+const SHARE_ALL = 7;
+const OPEN_EXISTING = 3;
+const OPEN_LINK_ITSELF = 0x0220_0000; // FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS
+const UNIX_EPOCH_TICKS = 116_444_736_000_000_000n;
+
+function fileTime(ns: bigint): Buffer {
+  const time = Buffer.alloc(8);
+  time.writeBigUInt64LE(ns / 100n + UNIX_EPOCH_TICKS);
+  return time;
+}
+
+/** Puts a file's times back, tick for tick. Moves `ctime`, as the stream write already did. */
+function restoreTimes(path: string, { atimeNs, mtimeNs }: BigIntStats): void {
+  const { open, setTimes, close } = fileApi!;
+  const flags = [FILE_WRITE_ATTRIBUTES, SHARE_ALL, null, OPEN_EXISTING, OPEN_LINK_ITSELF, null];
+  const handle = open(toNamespacedPath(path), ...flags) as number;
+  if (handle === -1) throw new Error(`Could not open ${path} to restore its modified time`);
+  try {
+    if (!setTimes(handle, null, fileTime(atimeNs), fileTime(mtimeNs))) {
+      throw new Error(`Could not restore the modified time of ${path}`);
+    }
+  } finally {
+    close(handle);
+  }
+}
+
 const win32: Backend = {
   read: async (path) => {
     const name = stream(path);
@@ -144,11 +183,11 @@ const win32: Backend = {
     return ((await ifExists(readFile(name, 'utf8'))) ?? '').split(',');
   },
   write: async (path, tags) => {
-    const before = await stat(path);
+    const before = await stat(path, { bigint: true });
     if (tags.length) await writeFile(stream(path), tags.join(','));
     else await ifExists(unlink(stream(path)));
     // Any stream write moves mtime on Windows, which would make the file look edited.
-    await utimes(path, before.atime, before.mtime);
+    restoreTimes(path, before);
   },
 };
 

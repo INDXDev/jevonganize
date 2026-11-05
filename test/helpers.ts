@@ -6,10 +6,11 @@ import { afterEach, beforeEach } from 'vitest';
 
 /**
  * Makes a fresh temp home and points `JEVONGANIZE_HOME` at it. Pair it with `removeTempHome`, or
- * use `useTempHome`. The path is resolved, since macOS temp paths go through a symlink.
+ * use `useTempHome`. The path is resolved as the index stores it: macOS temp paths go through a symlink, and
+ * Windows ones can hold an 8.3 short name, which only `native` expands.
  */
 export function makeTempHome(): string {
-  const home = realpathSync(mkdtempSync(join(tmpdir(), 'jevonganize-test-')));
+  const home = realpathSync.native(mkdtempSync(join(tmpdir(), 'jevonganize-test-')));
   process.env.JEVONGANIZE_HOME = home;
   return home;
 }

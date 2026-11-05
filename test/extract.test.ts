@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { once } from 'node:events';
 import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -404,16 +405,37 @@ describe('the pipeline', () => {
     expect((await extract('report.pdf')).text).not.toBe('');
   });
 
-  it('fails one file when its worker dies', async () => {
-    const running = extract('photo.heic', { timeout_seconds: 5 }); // slow enough to catch mid-task
-    await new Promise((done) => setTimeout(done, 100));
-    await Promise.all(workerPool().threads.map((thread) => thread.terminate()));
+  it('fails one file when its worker dies mid-task', async () => {
+    const pool = workerPool();
+    // With no idle worker the task needs a new one, and piscina hands it over as that one is ready.
+    await Promise.all(pool.threads.map((thread) => thread.terminate()));
+    const ready = once(pool, 'workerCreate');
+    const running = extract('photo.heic', { timeout_seconds: 5 });
+    await ready;
+    await new Promise(setImmediate);
+    await Promise.all(pool.threads.map((thread) => thread.terminate()));
     const state = await running;
-    // A worker killed before it took the task leaves piscina waiting, so the timeout ends it.
-    expect(state.warnings[0]).toMatch(/^worker failed|^timed out/);
+    expect(state.warnings[0]).toMatch(/^worker failed/);
     expect(isFailed(state)).toBe(true);
     expect((await extract('table.csv')).text).toContain('lantern oil');
   });
+
+  it('times out a task whose worker dies while starting, in a process with nothing else alive', async () => {
+    const script = `
+      import { configSchema } from './src/core/config.ts';
+      import { extractFile, workerPool } from './src/extract/index.ts';
+      const config = configSchema.parse({ budget: { timeout_seconds: 1 } });
+      const running = extractFile(process.argv[1], config);
+      while (!workerPool().threads.length) await new Promise(setImmediate);
+      await Promise.all(workerPool().threads.map((thread) => thread.terminate()));
+      process.stdout.write((await running).warnings.join());`;
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      ['--input-type=module', '--eval', script, fixture('table.csv')],
+      { cwd: join(import.meta.dirname, '..') },
+    );
+    expect(stdout).toBe('timed out');
+  }, 30_000);
 
   it('does not count time queued behind other files against a timeout', async () => {
     const paths = Array.from({ length: 200 }, () => extract('photo.jpg', { timeout_seconds: 5 }));
@@ -421,30 +443,35 @@ describe('the pipeline', () => {
     expect(states.every((state) => state.images.length === 1)).toBe(true);
   }, 60_000);
 
-  it('runs from source with plain Node, kills a hung tool, and lets the process exit', async () => {
-    const bin = join(temp, 'bin');
-    const pidFile = join(temp, 'tool.pid');
-    await promisify(execFile)('mkdir', ['-p', bin]);
-    await writeFile(join(bin, 'ffmpeg'), `#!/bin/sh\necho $$ > "${pidFile}"\nexec sleep 60\n`);
-    await chmod(join(bin, 'ffmpeg'), 0o755);
-    const script = `
+  // Needs a shell script standing in for `ffmpeg`. Windows looks for a compiled `ffmpeg.exe`.
+  it.skipIf(process.platform === 'win32')(
+    'runs from source with plain Node, kills a hung tool, and lets the process exit',
+    async () => {
+      const bin = join(temp, 'bin');
+      const pidFile = join(temp, 'tool.pid');
+      await promisify(execFile)('mkdir', ['-p', bin]);
+      await writeFile(join(bin, 'ffmpeg'), `#!/bin/sh\necho $$ > "${pidFile}"\nexec sleep 60\n`);
+      await chmod(join(bin, 'ffmpeg'), 0o755);
+      const script = `
       import { configSchema } from './src/core/config.ts';
       import { extractFile } from './src/extract/index.ts';
       const config = configSchema.parse({ budget: { timeout_seconds: 3 } });
       const state = await extractFile(process.argv[1], config);
       process.stdout.write(JSON.stringify({ text: state.text, warnings: state.warnings }));`;
-    const started = Date.now();
-    const { stdout } = await promisify(execFile)(
-      process.execPath,
-      ['--input-type=module', '--eval', script, fixture('clip.mp4')],
-      {
-        cwd: join(import.meta.dirname, '..'),
-        env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` },
-      },
-    );
-    expect(Date.now() - started).toBeLessThan(20_000);
-    expect(JSON.parse(stdout).warnings.join()).toMatch(/ffmpeg-frames/);
-    const pid = Number(await readFile(pidFile, 'utf8'));
-    expect(() => process.kill(pid, 0)).toThrow('ESRCH');
-  }, 30_000);
+      const started = Date.now();
+      const { stdout } = await promisify(execFile)(
+        process.execPath,
+        ['--input-type=module', '--eval', script, fixture('clip.mp4')],
+        {
+          cwd: join(import.meta.dirname, '..'),
+          env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` },
+        },
+      );
+      expect(Date.now() - started).toBeLessThan(20_000);
+      expect(JSON.parse(stdout).warnings.join()).toMatch(/ffmpeg-frames/);
+      const pid = Number(await readFile(pidFile, 'utf8'));
+      expect(() => process.kill(pid, 0)).toThrow('ESRCH');
+    },
+    30_000,
+  );
 });

@@ -7,6 +7,8 @@ import { paths } from '../src/core/config.ts';
 import { thumbnail } from '../src/extract/thumbs.ts';
 import type { FileRow } from '../src/types.ts';
 
+sharp.cache(false); // these reads run in this process, and on Windows the cache locks the file
+
 const fixture = (name: string) => join(import.meta.dirname, 'fixtures/files', name);
 const row = (path: string, hash?: string): FileRow & { hash?: string } => ({
   id: 1,

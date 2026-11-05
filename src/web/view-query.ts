@@ -67,8 +67,11 @@ export function toFileQuery(v: View): FileQuery {
   };
 }
 
+/** The separator of a path from the server, whatever OS the browser is on. */
+export const pathSep = (path: string) => (path.startsWith('/') ? '/' : '\\');
+
 function lastSegment(path: string) {
-  return path.split('/').findLast(Boolean) ?? path;
+  return path.split(pathSep(path)).findLast(Boolean) ?? path;
 }
 
 /** The screen's name, else the first tag, else the last folder segment. */

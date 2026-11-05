@@ -20,7 +20,7 @@ import { Dialog } from '../components/ui/dialog.tsx';
 import { Select } from '../components/ui/field.tsx';
 import { cn, formatCount, shortPath } from '../lib.ts';
 import { notify, setView, useActions, useView, useWindow } from '../tabs.ts';
-import { toFileQuery, type View } from '../view-query.ts';
+import { pathSep, toFileQuery, type View } from '../view-query.ts';
 import { Inspector } from './inspector.tsx';
 
 const TYPES = [
@@ -183,12 +183,19 @@ const crumb = (text: string, folder: string | null, last: boolean) => (
 
 function Crumbs({ view, libraries }: { view: View; libraries: Library[] }) {
   const root = libraries.find((l) => view.folder?.startsWith(l.path))?.path;
+  const sep = pathSep(root ?? '/');
   const parts =
-    root && view.folder ? view.folder.slice(root.length).split('/').filter(Boolean) : [];
+    root && view.folder ? view.folder.slice(root.length).split(sep).filter(Boolean) : [];
   const items = [crumb('All', null, !root)];
   if (root) items.push(crumb(shortPath(root), root, !parts.length));
   parts.forEach((part, i) =>
-    items.push(crumb(part, `${root}/${parts.slice(0, i + 1).join('/')}`, i === parts.length - 1)),
+    items.push(
+      crumb(
+        part,
+        [root?.replace(/[\\/]$/, ''), ...parts.slice(0, i + 1)].join(sep),
+        i === parts.length - 1,
+      ),
+    ),
   );
   return (
     <nav aria-label="Folder" className="flex min-w-0 items-center gap-1 font-mono text-xs">

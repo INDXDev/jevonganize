@@ -1,7 +1,7 @@
 /** The tool table: every operation, defined once. The CLI, HTTP, chat and MCP all call it. */
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { readdir, realpath, rm, stat } from 'node:fs/promises';
+import { readdir, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { stringify } from 'smol-toml';
@@ -29,6 +29,7 @@ import {
   type Config,
   configJsonSchema,
   ifExists,
+  indexedPath,
   isTable,
   loadConfig,
   parseToml,
@@ -440,9 +441,9 @@ export const tools: ToolTable = {
     writes: true,
     agent: false,
     run: async ({ path }, { db, config }) => {
-      const root = await ifExists(realpath(resolve(path)));
-      if (root === undefined || !(await stat(root)).isDirectory()) {
-        throw new UserError(`${resolve(path)} is not a folder`);
+      const root = indexedPath(path);
+      if (!(await ifExists(stat(root)))?.isDirectory()) {
+        throw new UserError(`${root} is not a folder`);
       }
       // By real path, or a link would carry a secret folder past rules that go by whole path.
       if (secretRoot(config, root)) throw new UserError(`${root} is excluded`);
@@ -459,7 +460,7 @@ export const tools: ToolTable = {
     writes: true,
     agent: false,
     run: async ({ path }, { db }) => {
-      db.removeLibrary(resolve(path));
+      db.removeLibrary(indexedPath(path));
       syncWatchers();
     },
   },
@@ -493,7 +494,7 @@ export const tools: ToolTable = {
     run: async ({ path }, ctx) => {
       const { db, config } = ctx;
       const known = db.listLibraries().map((library) => library.path);
-      const roots = path === undefined ? known : [resolve(path)];
+      const roots = path === undefined ? known : [indexedPath(path)];
       const unknown = roots.find((root) => !known.includes(root));
       if (unknown !== undefined) throw new UserError(`${unknown} is not a library`);
       const facets = await loadFacets(config);
@@ -554,7 +555,7 @@ export const tools: ToolTable = {
     agent: true,
     run: async ({ id, path }, { db }) => {
       if (id === undefined && path === undefined) throw new UserError('Give an id or a path');
-      const found = id ?? db.fileByPath(resolve(path ?? ''))?.id;
+      const found = id ?? db.fileByPath(indexedPath(path ?? ''))?.id;
       const detail = found === undefined ? undefined : db.fileDetail(found);
       if (!detail) {
         const hint = path === undefined ? '' : ` Run: jevonganize scan ${dirname(resolve(path))}`;

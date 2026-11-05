@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, stat, symlink, utimes, writeFile } from 'node:fs/promises';
-import type * as FsPromises from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import bplist from 'bplist-creator';
@@ -237,9 +236,14 @@ describe('the linux backend, against a fake libc', () => {
   });
 });
 
-describe('the win32 backend, with a sibling file standing in for the stream', () => {
+describe('the win32 backend: a real stream on Windows, a sibling file elsewhere', () => {
+  beforeEach(() => {
+    if (process.platform === 'win32') return;
+    vi.doMock('koffi', () => ({ default: { load: () => ({ func: () => () => 1 }) } }));
+  });
+
   afterEach(() => {
-    vi.doUnmock('node:fs/promises');
+    vi.doUnmock('koffi');
     vi.restoreAllMocks();
     vi.resetModules();
   });
@@ -260,23 +264,74 @@ describe('the win32 backend, with a sibling file standing in for the stream', ()
     await expect(tags.readTags(join(home(), 'missing'))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(tags.readTags('C')).rejects.toThrow(/absolute/);
   });
+});
 
-  it('restores mtime after a stream write moved it', async () => {
-    const old = new Date('2020-01-02T03:04:05Z');
-    await utimes(file, old, old);
-    // A stream write moves the file's mtime on Windows. A sibling file would not, so simulate it.
-    vi.doMock('node:fs/promises', async (original) => {
-      const real = await original<typeof FsPromises>();
-      return {
-        ...real,
-        writeFile: async (...args: Parameters<typeof real.writeFile>) => {
-          await real.writeFile(...args);
-          await real.utimes(file, new Date(), new Date());
-        },
-      };
-    });
-    const tags = await tagsOn('win32');
-    await tags.writeTags(file, ['a']);
-    expect((await stat(file)).mtime).toEqual(old);
+async function times(path: string) {
+  const { mtimeNs, ctimeNs } = await stat(path, { bigint: true });
+  return { mtimeNs, ctimeNs };
+}
+const tick = () => new Promise((done) => setTimeout(done, 20));
+
+describe.runIf(process.platform === 'win32')('tags on this Windows volume', () => {
+  it('stores, reads and removes a real stream, and leaves the content alone', async () => {
+    expect(await supported(home())).toBe(true);
+    await writeTags(file, ['山田', 'a']);
+    expect(await readFile(stream(), 'utf8')).toBe('a,山田');
+    expect(await readTags(file)).toEqual(['a', '山田']);
+    expect(await readFile(file, 'utf8')).toBe('content');
+    expect((await stat(file)).size).toBe('content'.length);
+    await writeTags(file, []);
+    await expect(readFile(stream())).rejects.toMatchObject({ code: 'ENOENT' });
+    await writeTags(file, []);
+    expect(await readTags(file)).toEqual([]);
+  });
+
+  it('reads a stream another program wrote', async () => {
+    await writeFile(stream(), 'b,a,,a');
+    expect(await readTags(file)).toEqual(['a', 'b']);
+  });
+
+  it('keeps mtime to the tick on write and removal, and ctime moves', async () => {
+    const before = await times(file);
+    await tick();
+    await writeTags(file, ['a']);
+    const written = await times(file);
+    expect(written.mtimeNs).toBe(before.mtimeNs);
+    expect(written.ctimeNs).toBeGreaterThan(before.ctimeNs);
+    await tick();
+    await writeTags(file, []);
+    const removed = await times(file);
+    expect(removed.mtimeNs).toBe(before.mtimeNs);
+    expect(removed.ctimeNs).toBeGreaterThan(written.ctimeNs);
+  });
+
+  it('works past MAX_PATH', async () => {
+    const dir = join(home(), ...Array.from({ length: 6 }, () => 'd'.repeat(50)));
+    await mkdir(dir, { recursive: true });
+    const deep = join(dir, 'file.txt');
+    await writeFile(deep, 'content');
+    const before = await times(deep);
+    await writeTags(deep, ['a']);
+    expect(await readTags(deep)).toEqual(['a']);
+    expect((await times(deep)).mtimeNs).toBe(before.mtimeNs);
+  });
+
+  it('keeps tags through a rename', async () => {
+    await writeTags(file, ['a']);
+    const moved = join(home(), 'moved.txt');
+    await rename(file, moved);
+    expect(await readTags(moved)).toEqual(['a']);
+  });
+
+  it('does not follow a symlink', async () => {
+    const link = join(home(), 'link');
+    await symlink(file, link);
+    await expect(writeTags(link, ['a'])).rejects.toBeInstanceOf(UserError);
+    expect(await readTags(file)).toEqual([]);
+  });
+
+  it('throws for a missing file rather than reading it as untagged', async () => {
+    await unlink(file);
+    await expect(readTags(file)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

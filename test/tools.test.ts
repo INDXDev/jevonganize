@@ -1,4 +1,14 @@
-import { mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm as remove,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   Experimental_DecisionMockModelV4 as MockDecisionModel,
@@ -141,6 +151,28 @@ describe('applying a plan twice at once', () => {
     expect(await callTool('list_plans', { status: 'proposed' }, ctx)).toMatchObject([{ id }]);
   });
 });
+
+// A short 8.3 name on the Windows runner, and a symlink on macOS. A plain path on Linux has neither.
+describe.runIf(tmpdir() !== realpathSync.native(tmpdir()))(
+  'a path that is not the real path',
+  () => {
+    test('finds the same library and file as the real path', async () => {
+      const alias = await mkdtemp(join(tmpdir(), 'jevonganize-alias-'));
+      const real = realpathSync.native(alias);
+      try {
+        await writeFile(join(alias, 'a.txt'), 'x');
+        expect((await callTool('add_library', { path: alias }, ctx)).path).toBe(real);
+        await waitForJob((await callTool('scan', { path: alias }, ctx)).id);
+        const file = await callTool('get_file', { path: join(alias, 'a.txt') }, ctx);
+        expect(file.path).toBe(join(real, 'a.txt'));
+        await callTool('remove_library', { path: alias }, ctx);
+        expect(ctx.db.fileByPath(join(real, 'a.txt'))).toBeUndefined();
+      } finally {
+        await remove(real, { recursive: true, force: true });
+      }
+    });
+  },
+);
 
 describe('symlinked libraries', () => {
   test('a link to a secret folder is refused', async () => {

@@ -25,18 +25,23 @@ describe('the credentials file', () => {
   it('stores keys in a 0600 file inside a 0700 directory', async () => {
     await setApiKey('openai', ' sk-one\n');
     expect(await getApiKey('openai')).toBe('sk-one');
+    if (process.platform === 'win32') return; // POSIX modes do not exist there. See docs/security.md
     expect(await mode(paths.credentialsFile())).toBe(0o600);
     expect(await mode(paths.configDir())).toBe(0o700);
   });
 
-  it('reapplies the modes when they have loosened', async () => {
-    await setApiKey('openai', 'one');
-    await chmod(paths.credentialsFile(), 0o644);
-    await chmod(paths.configDir(), 0o755);
-    await setApiKey('typesafe', 'two');
-    expect(await mode(paths.credentialsFile())).toBe(0o600);
-    expect(await mode(paths.configDir())).toBe(0o700);
-  });
+  // POSIX modes do not exist on Windows, where `chmod` sets only the read-only attribute.
+  it.skipIf(process.platform === 'win32')(
+    'reapplies the modes when they have loosened',
+    async () => {
+      await setApiKey('openai', 'one');
+      await chmod(paths.credentialsFile(), 0o644);
+      await chmod(paths.configDir(), 0o755);
+      await setApiKey('typesafe', 'two');
+      expect(await mode(paths.credentialsFile())).toBe(0o600);
+      expect(await mode(paths.configDir())).toBe(0o700);
+    },
+  );
 
   it('replaces a planted symlink rather than writing through it', async () => {
     const target = join(home(), 'target');

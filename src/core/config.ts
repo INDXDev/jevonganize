@@ -1,7 +1,8 @@
 /** Paths, the config schema, and reading and writing the config file. */
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { chmod, mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import envPaths from 'env-paths';
 import { parse, stringify, TomlError } from 'smol-toml';
 import { z } from 'zod';
@@ -24,6 +25,19 @@ export const paths = {
 function home(kind: string): string | undefined {
   const root = process.env.JEVONGANIZE_HOME;
   return root ? join(root, kind) : undefined;
+}
+
+/**
+ * A path as the index holds it, for comparing with stored paths: its real path. `native`, because
+ * only that also expands Windows 8.3 short names and fixes a drive's or file's letter case.
+ */
+// shortcut: a path that is gone is only resolved, so a short name to a gone file misses its row.
+export function indexedPath(path: string): string {
+  try {
+    return realpathSync.native(resolve(path));
+  } catch {
+    return resolve(path);
+  }
 }
 
 const provider = z.strictObject({

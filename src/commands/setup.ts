@@ -1,7 +1,8 @@
 /** `setup`: key, folder, packs, then a scan and the cost of a first run. Writes no tags. */
+import { homedir } from 'node:os';
 import { cancel, multiselect, text } from '@clack/prompts';
 import type { Command } from 'commander';
-import { UserError } from '../core/config.ts';
+import { indexedPath, UserError } from '../core/config.ts';
 import { keySource } from '../core/credentials.ts';
 import { callTool, type Context } from '../core/tools.ts';
 import type { ProviderName } from '../types.ts';
@@ -11,7 +12,6 @@ import {
   commaList,
   costLine,
   follow,
-  indexedPath,
   type JsonFlag,
   out,
   outJson,
@@ -76,7 +76,7 @@ async function runSetup(flags: SetupFlags) {
       answered(
         await text({ ...prompt, message: 'Folder to organize', placeholder: '~/Downloads' }),
       );
-    const path = indexedPath(folder.replace(/^~(?=$|\/)/, process.env.HOME ?? '~'));
+    const path = indexedPath(folder.replace(/^~(?=$|[\\/])/, homedir()));
     await callTool('add_library', { path }, ctx);
     await choosePacks(flags, ctx);
     const final = await follow(ctx, await callTool('scan', { path }, ctx));

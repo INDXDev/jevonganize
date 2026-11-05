@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { chmod, mkdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configSchema, paths, UserError } from '../src/core/config.ts';
 import type { Config } from '../src/core/config.ts';
@@ -23,7 +23,8 @@ async function put(name: string, content = 'x'): Promise<string> {
   return path;
 }
 const scan = () => scanLibrary(db, config, root);
-const indexed = () => db.filesUnder(root).map((file) => file.path.slice(root.length + 1));
+const indexed = () =>
+  db.filesUnder(root).map((file) => file.path.slice(root.length + 1).replaceAll(sep, '/'));
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 /** Saves the way many apps do: a temp file renamed over the original. */
@@ -61,7 +62,8 @@ describe('walking', () => {
     await writeFile(join(outside, 'secret.txt'), 'x');
     await symlink(outside, at('dir-link'));
     await symlink(join(outside, 'secret.txt'), at('file-link'));
-    execFileSync('mkfifo', [at('pipe')]);
+    // Windows has no FIFOs. Git's `mkfifo` there makes a regular `pipe.lnk`, which is indexed rightly.
+    if (process.platform !== 'win32') execFileSync('mkfifo', [at('pipe')]);
     await put('real.txt');
     await scan();
     expect(indexed()).toEqual(['real.txt']);
@@ -149,19 +151,23 @@ describe('walking', () => {
     expect(indexed()).toEqual(['a.txt']);
   });
 
-  it('keeps rows under a folder it cannot read, and warns', async () => {
-    const path = await put('locked/a.txt');
-    await scan();
-    execFileSync('chmod', ['000', dirname(path)]);
-    try {
-      const result = await scan();
-      expect(result.removed).toBe(0);
-      expect(result.warnings.join()).toContain('locked');
-      expect(indexed()).toEqual(['locked/a.txt']);
-    } finally {
-      execFileSync('chmod', ['755', dirname(path)]);
-    }
-  });
+  // POSIX modes do not exist on Windows, so `chmod` cannot make a folder unreadable.
+  it.skipIf(process.platform === 'win32')(
+    'keeps rows under a folder it cannot read, and warns',
+    async () => {
+      const path = await put('locked/a.txt');
+      await scan();
+      execFileSync('chmod', ['000', dirname(path)]);
+      try {
+        const result = await scan();
+        expect(result.removed).toBe(0);
+        expect(result.warnings.join()).toContain('locked');
+        expect(indexed()).toEqual(['locked/a.txt']);
+      } finally {
+        execFileSync('chmod', ['755', dirname(path)]);
+      }
+    },
+  );
 
   it('yields to the event loop between batches, and reports progress', async () => {
     await Promise.all(Array.from({ length: 600 }, (_, index) => put(`f${index}`)));
@@ -252,7 +258,8 @@ describe('fingerprints', () => {
     expect((await scan()).ids).toContain(id);
   });
 
-  it('keeps the row of a file it could not stat', async () => {
+  // POSIX modes do not exist on Windows, so `chmod` cannot make a file unreachable.
+  it.skipIf(process.platform === 'win32')('keeps the row of a file it could not stat', async () => {
     await put('b.txt');
     await put('locked/a.txt');
     await scan();
@@ -261,7 +268,7 @@ describe('fingerprints', () => {
       const result = await scan();
       expect(result.removed).toBe(0);
       expect(result.warnings.join()).toContain('EACCES');
-      expect(indexed()).toContain(join('locked', 'a.txt'));
+      expect(indexed()).toContain('locked/a.txt');
     } finally {
       await chmod(at('locked'), 0o755);
     }
