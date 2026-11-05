@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["test/**/*.test.ts", "e2e/**/*.test.ts", "scripts/*.ts"],
+  "project": ["src/**/*.{ts,tsx}", "test/**/*.ts", "e2e/**/*.ts", "scripts/*.ts"],
+  "ignoreDependencies": ["tailwindcss"],
+  "ignoreBinaries": ["xattr", "mkfifo"],
+  "ignoreExportsUsedInFile": true,
+  "ignore": ["test/fixtures/**"]
+}

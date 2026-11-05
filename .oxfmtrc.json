@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "singleQuote": true,
+  "sortPackageJson": true,
+  "sortTailwindcss": { "stylesheet": "src/web/tokens.css", "functions": ["cn", "cva"] },
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    "dist/**",
+    "coverage/**",
+    "docs/**/*.md",
+    "test/fixtures/**",
+    "examples/**"
+  ]
+}

@@ -1,0 +1,90 @@
+pack = "projects"
+title = "Projects"
+
+[[facet]]
+id = "project"
+title = "Project"
+kind = "multi"
+open = true
+instructions = "Does this file belong to this named project, by naming it or by clearly being part of its work? A file that only mentions it does not count."
+weight = 2
+
+[[facet]]
+id = "area"
+title = "Area of life"
+kind = "choice"
+instructions = "To which area of the owner's life does this file mainly belong? Judge by its content, not its folder or name."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[facet.values]
+work = "A job or business the owner earns from."
+home = "The owner's home and household running, apart from its money."
+health = "The health of the owner or the people they care for."
+money = "Personal finances, such as banking, tax, insurance and investments."
+study = "Courses or learning the owner is taking."
+family = "Relatives and family events, apart from their health."
+travel = "Trips away from home."
+hobby = "Leisure pursuits done for pleasure."
+
+[[facet]]
+id = "phase"
+title = "Project phase"
+kind = "choice"
+instructions = "Which stage of a project does this file come from? Answer other if it does not belong to a project."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[facet.values]
+proposal = "The work is being offered or pitched and is not yet agreed."
+planning = "The work is agreed, and its scope or schedule is being worked out."
+in-progress = "The work is being carried out."
+delivery = "The finished work is being handed over or accepted."
+closed = "The work is over, and this is a closing record or review."
+
+[[facet]]
+id = "is-deliverable"
+title = "Is a deliverable"
+kind = "flag"
+instructions = "Is this a finished output made to be handed to someone? Working files, drafts and internal notes do not count."
+applies_to = ["application/*", "text/*", "image/*", "video/*"]
+
+[[facet]]
+id = "is-client-work"
+title = "Is client work"
+kind = "flag"
+instructions = "Was this made for an outside client, as a named client or a statement of work shows? Work for the author's own organisation does not count."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[[facet]]
+id = "is-meeting-note"
+title = "Is a meeting note"
+kind = "flag"
+instructions = "Is this the notes, the minutes or the agenda of a meeting? An invitation with no agenda does not count."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[[facet]]
+id = "is-plan"
+title = "Is a plan"
+kind = "flag"
+instructions = "Does this mainly set out future goals, a schedule or a budget? A report on past work does not count."
+applies_to = ["application/*", "text/*"]
+
+[[facet]]
+id = "has-tasks"
+title = "Has tasks"
+kind = "flag"
+instructions = "Does the file list tasks or to-dos as separate items? A single request in running text does not count."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[[facet]]
+id = "has-decision"
+title = "Has a decision"
+kind = "flag"
+instructions = "Does the file record a decision that was actually made, with wording such as agreed or decided? A proposal or an open question does not count."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[[facet]]
+id = "is-research"
+title = "Is research"
+kind = "flag"
+instructions = "Is this background material collected for reference, such as an article, a paper or a clipping written by someone else? The owner's own conclusions do not count."
+applies_to = ["application/*", "text/*"]

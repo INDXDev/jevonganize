@@ -1,0 +1,85 @@
+pack = "parties"
+title = "Parties"
+
+[[facet]]
+id = "party"
+title = "Party"
+kind = "multi"
+open = true
+instructions = "Is this person or organisation a direct party to the file, as its sender, recipient or counterparty? Someone merely mentioned does not count."
+weight = 1.5
+
+[[facet]]
+id = "author"
+title = "Author"
+kind = "field"
+field = "author"
+
+[[facet]]
+id = "last-author"
+title = "Last author"
+kind = "field"
+field = "last_author"
+
+[[facet]]
+id = "company"
+title = "Company"
+kind = "field"
+field = "company"
+
+[[facet]]
+id = "sender"
+title = "Sender"
+kind = "field"
+field = "from"
+
+[[facet]]
+id = "recipient"
+title = "Recipient"
+kind = "field"
+field = "to"
+
+[[facet]]
+id = "party-type"
+title = "Party type"
+kind = "choice"
+instructions = "Who is the main other party in this file, seen from its owner? Pick the most specific label that fits. Judge by the file's content, not its name."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[facet.values]
+person = "A private individual acting for themselves."
+company = "A business that is not a bank, school or clinic."
+government = "A public authority, such as a ministry, a city office or a court."
+bank = "A bank, card issuer or other lender."
+school = "A school, university or training provider."
+clinic = "A hospital, clinic, pharmacy or other healthcare provider."
+
+[[facet]]
+id = "my-role"
+title = "My role"
+kind = "choice"
+instructions = "What role does the file's owner play in it, judging by who the file is addressed to? Answer other if the owner cannot be told apart from the other parties."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[facet.values]
+payer = "The owner pays money, and no more specific role below applies."
+payee = "The owner receives money, and no more specific role below applies."
+employee = "The owner works for the other party."
+customer = "The owner buys goods or services from the other party."
+tenant = "The owner rents a home or premises from the other party."
+patient = "The owner receives healthcare from the other party."
+student = "The owner is taught by the other party."
+
+[[facet]]
+id = "is-official"
+title = "Is official"
+kind = "flag"
+instructions = "Was this issued by a government, a court or another public authority, as its letterhead, seal or wording shows? A private company's document does not count."
+applies_to = ["application/*", "message/*", "image/*"]
+
+[[facet]]
+id = "has-letterhead"
+title = "Has a letterhead"
+kind = "flag"
+instructions = "Does the document show an organisation's letterhead or logo at its top or as a printed header? An email signature does not count."
+applies_to = ["application/*", "image/*"]

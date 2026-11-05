@@ -1,0 +1,84 @@
+pack = "time"
+title = "Time"
+
+[[facet]]
+id = "year"
+title = "Year"
+kind = "field"
+field = "created"
+format = "year"
+
+[[facet]]
+id = "month"
+title = "Month"
+kind = "field"
+field = "created"
+format = "month"
+
+[[facet]]
+id = "fiscal-year"
+title = "Fiscal year"
+kind = "field"
+field = "created"
+format = "fiscal-year"
+
+[[facet]]
+id = "doc-date"
+title = "Document date"
+kind = "date"
+precision = "month"
+instructions = "What date does the file itself state as its date of issue? Ignore dates in its name, and dates of events it merely mentions."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[[facet]]
+id = "event-date"
+title = "Event date"
+kind = "date"
+precision = "month"
+instructions = "On what date does the event this file describes take place, such as a trip, a meeting or an appointment? Ignore the date the file was issued."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[[facet]]
+id = "due-date"
+title = "Due date"
+kind = "date"
+precision = "month"
+instructions = "By what date does the file say something must be paid, returned or done? Ignore dates that only record what already happened."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[[facet]]
+id = "expiry-date"
+title = "Expiry date"
+kind = "date"
+precision = "month"
+instructions = "On what date does the file say it, or the right it grants, stops being valid? Ignore payment deadlines."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[[facet]]
+id = "period"
+title = "Period covered"
+kind = "choice"
+instructions = "What length of time does the content of this file cover? Use the span it reports on, not the time it took to write."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[facet.values]
+day = "A single day, or part of one."
+week = "More than a day, and up to about a week."
+month = "More than a week, and up to about a month."
+quarter = "More than a month, and up to about three months."
+year = "More than three months, and up to about a year."
+several-years = "More than a year."
+
+[[facet]]
+id = "is-recurring"
+title = "Is recurring"
+kind = "flag"
+instructions = "Is this one of a repeating series, such as a monthly statement or a weekly report, as shown by a period, an issue number or similar wording? A single document that could be repeated does not count."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[[facet]]
+id = "is-time-sensitive"
+title = "Is time-sensitive"
+kind = "flag"
+instructions = "Does the file state a date after which it loses its value, such as an offer end, a deadline or an event day? A document with lasting value does not count, even if it is dated."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]

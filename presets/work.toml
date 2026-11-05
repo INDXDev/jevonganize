@@ -1,0 +1,111 @@
+pack = "work"
+title = "Work"
+
+[[facet]]
+id = "doc-purpose"
+title = "Document purpose"
+kind = "choice"
+instructions = "What is the main aim of this document? Pick the one aim it would fail without."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[facet.values]
+inform = "It gives news or facts, and asks for nothing."
+propose = "It puts forward an idea or a plan for approval."
+request = "It asks the reader for something specific."
+record = "It keeps an account of what happened, for later reference."
+teach = "It explains how to do or understand something."
+sell = "It tries to persuade the reader to buy."
+
+[[facet]]
+id = "audience"
+title = "Audience"
+kind = "choice"
+instructions = "Who is the intended reader of this file? Judge by how it is addressed and by what it assumes the reader knows. Use public only if it is written for anyone at all."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[facet.values]
+self = "The author alone."
+team = "A small group of people who work together."
+company = "A whole organisation, from the inside."
+customer = "Named customers or clients of the author's organisation."
+public = "Anyone at all, with no limit on who may read it."
+
+[[facet]]
+id = "department"
+title = "Department"
+kind = "choice"
+instructions = "Which business function does this file come from or belong to? Judge by its subject. Answer other if it is not a business file."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[facet.values]
+engineering = "Building or running products and technical systems."
+sales = "Winning and managing customer deals."
+marketing = "Promotion, branding and market communication."
+finance = "Accounting, budgets and company money."
+hr = "Hiring, staff matters and pay policy."
+legal = "Contracts, compliance and disputes."
+operations = "Day-to-day running, such as logistics, facilities and support."
+
+[[facet]]
+id = "code-language"
+title = "Code language"
+kind = "choice"
+instructions = "In which programming language is this source file written? Judge by the syntax, not by the file name. Answer other if it is not source code."
+applies_to = ["text/*", "application/*"]
+
+[facet.values]
+typescript = "TypeScript or JavaScript."
+python = "Python."
+go = "Go."
+rust = "Rust."
+java = "Java."
+c = "C or C++."
+shell = "A shell script, such as bash or zsh."
+sql = "SQL."
+
+[[facet]]
+id = "technical-depth"
+title = "Technical depth"
+kind = "level"
+instructions = """How much background does a reader need to follow this file? \
+none: the question does not apply. \
+general: no background, any adult can follow it. \
+informed: some familiarity with the field, and its usual terms. \
+expert: specialist training in the field."""
+levels = ["none", "general", "informed", "expert"]
+applies_to = ["application/*", "text/*"]
+
+[[facet]]
+id = "is-source-code"
+title = "Is source code"
+kind = "flag"
+instructions = "Is this program source itself? Prose about code does not count, even with examples."
+applies_to = ["text/*", "application/*"]
+
+[[facet]]
+id = "is-config"
+title = "Is a config file"
+kind = "flag"
+instructions = "Is this a settings or configuration file read by a program? Documentation about settings does not count."
+applies_to = ["text/*", "application/*"]
+
+[[facet]]
+id = "is-data-export"
+title = "Is a data export"
+kind = "flag"
+instructions = "Is this rows of data dumped from a system, such as a CSV or a JSON export? A hand-made table in a document does not count."
+applies_to = ["text/*", "application/*"]
+
+[[facet]]
+id = "is-resume"
+title = "Is a resume"
+kind = "flag"
+instructions = "Is this a CV or a resume, listing one person's jobs and education? A staff biography does not count."
+applies_to = ["application/*", "text/*", "image/*"]
+
+[[facet]]
+id = "is-training-material"
+title = "Is training material"
+kind = "flag"
+instructions = "Is this a course, a tutorial or onboarding content made to teach people? A reference manual does not count."
+applies_to = ["application/*", "text/*", "video/*"]

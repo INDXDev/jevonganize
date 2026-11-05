@@ -1,0 +1,56 @@
+# Built and run on macOS arm64 only. Windows and Linux targets have not been built. Test the packaged
+# app after any change here, especially onlyLoadAppFromAsar. See docs/security.md#electron.
+appId: com.github.indxdev.jevonganize
+productName: Jevonganize
+directories:
+  output: release
+files:
+  - dist/**
+  - presets/**
+  - package.json
+# Native modules are Node-API prebuilds, so there is no rebuild step.
+npmRebuild: false
+asarUnpack:
+  - node_modules/sharp/**
+  - node_modules/@img/**
+  - node_modules/detect-libc/**
+  - node_modules/semver/**
+  - node_modules/@napi-rs/**
+  - node_modules/koffi/**
+  - node_modules/libheif-js/**
+extraResources:
+  - THIRD_PARTY_NOTICES.md
+electronLanguages:
+  - en
+  - en-US
+  - ja
+electronFuses:
+  runAsNode: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+# Builds are unsigned until a signing identity exists. Apple silicon refuses to run an app with no
+# signature at all, and fuses invalidate Electron's own, so macOS gets an ad-hoc one. It proves
+# nothing about the publisher: people must still allow the app in Privacy & Security. Unsigned
+# builds get no automatic updates.
+mac:
+  identity: '-'
+  hardenedRuntime: false
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: arm64
+win:
+  target:
+    - target: nsis
+      arch: x64
+linux:
+  category: Utility
+  target:
+    - target: AppImage
+      arch: x64
+# Each platform job adds to one draft. A person publishes it.
+publish:
+  provider: github
+  owner: INDXDev
+  repo: jevonganize
+  releaseType: draft

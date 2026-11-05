@@ -1,0 +1,248 @@
+# Tags
+
+A tag is one flat string, stored by the operating system on the file. Tags on disk are the source of
+truth. `core/tags.ts` is the only module that reads or writes them, and its interface is the same on
+every OS. See [contracts](contracts.md#tags-coretagsts).
+
+**Test status.** The macOS behaviour below was tested on macOS 14 with APFS, HFS+, exFAT and FAT32.
+The Linux and Windows backends have never been run. Their behaviour comes from documentation and is
+unverified until they run in CI.
+
+## Grammar
+
+```text
+tag      = facet-tag | flag-tag | plain-tag
+facet-tag = <facet id> ":" <label>       doc-type:invoice
+flag-tag  = "flag:" <facet id>           flag:has-signature
+plain-tag = any allowed string           to-read
+label     = part ("/" part)*             topic:finance/tax
+```
+
+- The first `:` separates facet from label. A later `:` is part of the label.
+- `/` marks hierarchy. Only the leaf is stored: `topic:finance/tax`, never also `topic:finance`.
+- A date label is ISO 8601 cut to its precision: `doc-date:2026` or `doc-date:2026-03`.
+- Facet ids and generated labels are lowercase kebab-case where the language allows. Unicode is
+  allowed in names: `party:山田商事`.
+- A generated tag is at most 64 characters. A person's tag has no such limit.
+- If the part before the first `:` is not a known facet id, the tag is plain. `tag.facet` is then
+  null, and the whole string is still treated as one tag.
+
+`/` and `:` mean something only inside Jevonganize. On disk, `year/2024` is an ordinary plain tag.
+
+## Portable encoding
+
+These rules apply on every OS, even where a store would allow more. That keeps behaviour identical.
+
+| Rule | Value | Why |
+| --- | --- | --- |
+| Forbidden | Control characters, and `,` `;` `"` `\` `*` `?` | `,` is the Linux separator, `;` is the Explorer separator, a newline breaks the macOS format, and the rest is Spotlight query syntax |
+| Normalization | Unicode NFC, then trim. On read and on write | macOS stores NFC and NFD as different tags |
+| Case | Preserved. Unique ignoring case, and the first spelling wins | macOS keeps `Upper` and `upper` as two tags |
+| Order | Sorted by code unit | Tags are a set |
+| Size | 2,048 UTF-8 bytes per file, joined with `,` | Fits ext4's single block with room to spare |
+| Emoji | Allowed, including joined sequences | The forbidden class is `\p{Cc}` only, so the zero-width joiner survives |
+
+`normalize()` applies NFC, trim, uniqueness and order. `writeTags()` also rejects a set that breaks a
+rule, and writes nothing. The file keeps the tags it had.
+
+**A foreign tag can block a write.** Finder allows `a,b`. `readTags()` returns it, but any later
+write of a set that still contains it fails, and the failure is recorded on that plan op. The fix is
+to rename the tag with `rename_tag`. That removes the bad spelling, so the write succeeds.
+
+**Warning on `:`.** One third-party source says colons in tags caused problems on some macOS versions.
+`fiscal-year:FY2025` worked on macOS 14 through `NSURL`, `mdls` and `mdfind`. It has not been checked
+in Finder's window or on other versions.
+
+## Where tags are stored
+
+| OS | Store | Format | Shown by |
+| --- | --- | --- | --- |
+| macOS | xattr `com.apple.metadata:_kMDItemUserTags` | Binary plist array of `name\ncolour` | Finder tags and Spotlight |
+| Linux | xattr `user.xdg.tags` | UTF-8, joined with `,` | KDE Dolphin and Baloo |
+| Windows | NTFS stream `:jevonganize.tags` | UTF-8, joined with `,` | Nothing. See below |
+
+An empty set deletes the attribute or stream.
+
+- **macOS:** existing Finder colours are kept. Jevonganize does not model them. A write also clears
+  the legacy colour bits in `com.apple.FinderInfo` byte 9, or a removed tag can come back as a
+  colour tag. Other FinderInfo bytes are kept. The format is private to Apple, and only
+  `NSURLTagNamesKey` is documented. It has been stable, and Dropbox depends on it, but Apple
+  promises nothing.
+- **Linux:** `user.xdg.tags` is a KDE convention, not a specification.
+- **Windows:** streams need NTFS or ReFS. Paths must be absolute.
+
+`supported(path)` writes a throwaway probe file once per volume and reads it back. The result differs
+by OS even for one file system: exFAT works on macOS through `._` sidecar files, and is expected to
+fail on Linux and Windows. When it is false, the UI says so and offers no tag actions there.
+
+Tag writes do not follow symlinks.
+
+## What you will and will not see
+
+Be clear about this before relying on it.
+
+| Environment | Tags in the file manager | OS search |
+| --- | --- | --- |
+| macOS Finder | Yes. Reads through `NSURL`, `mdls` and Spotlight were tested. The Finder window itself was not visually checked | Yes, through Spotlight. Case-sensitive by default |
+| Linux, KDE Dolphin | Yes, expected. `/` nests tags under `tags:/`, with open bugs on deep nesting | Baloo |
+| Linux, GNOME Files | **No. Shows nothing.** GNOME has no user tags | No |
+| Windows Explorer | **No. Shows nothing, on any file.** Windows Search cannot find them either | No |
+
+On Windows and GNOME, use the Jevonganize app to see and search tags. Tags are still on the files.
+
+Windows has no tag that works for every file type. Explorer's "Tags" field exists only where a
+handler supports the format, and it rewrites the file's content. PDF and plain text have none by
+default. One stream for every file is the only option that behaves the same for all files and leaves
+content untouched. A signed property handler could show the same stream in Explorer later. It is out
+of scope for now.
+
+## What survives
+
+Tags are fragile by nature. They live beside a file's bytes, not inside them. Microsoft moved away
+from this design in Vista for that reason. Jevonganize accepts the trade-off, and makes loss visible
+through [lost tags](#lost-tags).
+
+Tags do not cross operating systems. The three stores are separate, so a file moved from a Mac to
+Linux loses them in practice.
+
+| Action | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Rename or move, same volume | Kept (tested) | Kept (expected) | Kept (expected) |
+| `cp`, `ditto`, Finder copy | Kept by `cp` and `ditto` (tested). Lost by `cp -X` | Lost unless `cp --preserve=xattr` (not tested) | Explorer copy, NTFS to NTFS: reported kept |
+| Copy to exFAT or FAT | Kept in a `._` sidecar (tested). Lost if only the main file is taken elsewhere | Lost: no xattrs there | Lost, after a warning from Explorer (reported) |
+| `rsync` | Kept with `-aE`, lost with `-a` (tested) | Needs `-X` (not tested) | Not applicable |
+| `tar` | Kept by bsdtar, macOS to macOS (tested) | Not tested | Not tested |
+| `zip`, then `unzip` | **Lost** (tested). `ditto -c -k` then `ditto -x -k` keeps them | Expected lost | **Lost** (reported) |
+| Email or upload | Expected lost | Expected lost | **Lost** (reported) |
+| `git clone` or checkout | **Lost** (tested). Git stores no attributes | Expected lost | Expected lost |
+| Save by writing a temp file and renaming | **Lost** (tested, also `sed -i`) | Expected lost | Depends on the app. Those using `ReplaceFile` keep streams |
+| Save in place | Kept (tested) | Expected kept | Expected kept |
+| Node `fs.copyFile`, `fs.cp` | **Lost** (tested) | Not tested | Not tested |
+
+Sync services were not tested.
+
+| Service | What is known |
+| --- | --- |
+| iCloud Drive | Reported kept, including evicted files. Third-party source |
+| Dropbox | Its documentation lists macOS tags as synced. A `:jevonganize.tags` stream is probably not |
+| Google Drive | Reported lost, in one forum post |
+| OneDrive | No source found |
+| NFS and network shares | "Not always preserved". NFS needs v4.2 on both sides |
+
+## Merge on write
+
+A write can never lose a tag set elsewhere. To apply one op on one file:
+
+1. Read the tags from disk with `readTags`. Do not trust the mirror.
+2. Compute `(disk ∪ add) − remove`.
+3. If the result equals the disk set, stop.
+4. Call `writeTags` with the result.
+5. Update the mirror and the stored fingerprint at once, so `watch` does not treat the write as an
+   outside change. That hides any tag that left the file since the last scan, so handle those here
+   as the scan would: a tombstone for an AI tag, or a `restore` item if the file was replaced.
+6. Replace the op in the stored plan with what really changed, so undo reverses only that. The
+   change is recorded as soon as it is written, so a crash loses no undo.
+
+Undo is the same merge with `add` and `remove` swapped. A tag added by someone else after the plan
+ran stays. A restored tag keeps the provenance its plan implies: an organize plan removed an AI tag,
+so it comes back with `ai = 1`. A cancelled or partly failed undo leaves the plan `applied`, holding
+only the ops still to reverse.
+
+There is no lock. An edit that lands between steps 1 and 4 can be lost. The window is a few
+milliseconds per file, and no OS offers an atomic alternative.
+
+A failed write is recorded in `plan.errors` for that file, and the rest of the plan continues.
+
+## AI provenance
+
+`file_tag.ai` is 1 when the app wrote the tag: an applied AI answer, or a `field` value from metadata.
+
+- **A tag not recorded as AI is human, and is never removed by Jevonganize on its own.** Only a plan
+  that a person approved can remove it.
+- Organize may replace or remove a tag with `ai = 1`, when a new answer no longer supports it. That
+  change still appears in a plan.
+- A tag a person accepted from review is stored with `ai = 0`. They vouched for it.
+- A tag found on disk during a scan is stored with `ai = 0`.
+- A `field` tag is stored with `ai = 1`, so it can follow the metadata when that changes.
+- When a person removes a tag with `ai = 1`, a `rejected` review row keeps it from coming back. If
+  they undo that removal, the row goes.
+- A person who removes an AI tag and adds it back owns it from the next scan, so an older organize
+  plan refuses to remove it.
+- If a person adds an AI tag's exact string, the row stays `ai = 1`. The strings cannot be told apart.
+
+**If the index is lost, all tags count as human.** Nothing on disk marks a tag as AI. This only ever
+errs towards keeping a tag, which is the safe direction.
+
+If a person removes an AI tag, the scan drops it from the mirror. The stored answer remains, so a
+later organize of that file can propose the tag again. It would appear in a plan, never silently.
+
+## Lost tags
+
+Many apps save by writing a temp file and renaming it over the original. That gives the file a new
+inode and drops its tags, on macOS at least. How many real apps do this was not measured.
+
+A scan handles a path that already has a row in the index like this:
+
+| Inode | Tags on disk versus mirror | Meaning | Action |
+| --- | --- | --- | --- |
+| Same | Fewer | A person removed them | Update the mirror. Respect it |
+| New | Same or more | Normal save | Update the mirror |
+| New | Fewer | A save probably dropped them | Update the mirror, and add one `restore` review item per missing tag |
+
+The mirror always follows the disk, so the tags on disk stay the truth. The `restore` item is the
+only record of what was lost.
+
+**Restoration is never silent.** A new inode can also mean you replaced the file with a different
+document, so a person decides. Accepting an item merges the tag back through a normal write, with
+`ai = 0`. Accepting or rejecting deletes the item, so losing the tag again raises a new one. An item
+whose tag is back on the file is dropped.
+
+A volume with unstable inode numbers can raise false items. They cost one click and cannot change
+any tags.
+
+## Windows file times
+
+On Windows, any stream write updates the file's modified time. That would trigger backup and sync
+tools, and make every tagged file look edited.
+
+So after a stream write, `core/tags.ts` restores the time:
+
+1. `stat` the file before the write.
+2. Write the stream.
+3. Call `fs.utimes` with the old `atime` and `mtime`.
+4. `stat` again, and store that result as the fingerprint.
+
+Step 4 matters because `fs.utimes` does not keep full precision, so the stored `mtime` may differ
+slightly from the original. `ctime` still moves. macOS leaves `mtime` alone, and Linux is expected to.
+This is unverified on Windows.
+
+## Change detection
+
+A tag write changes `ctime` and not `mtime` on macOS. That shapes everything here.
+
+| | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| `mtime` on a tag write | Unchanged (tested) | Unchanged (expected) | Changes, then restored |
+| `ctime` on a tag write | Changes (tested) | Changes (expected) | Expected to change |
+| Event source | FSEvents | inotify `IN_ATTRIB` | `ReadDirectoryChangesW` |
+
+**Why `fs.watch`.** Built-in `fs.watch` reports every xattr change on macOS (tested). chokidar compares
+`size`, `mtime` and inode, so it reports none. `@parcel/watcher` reported only the first, as a
+`create`. Both ignore changes that leave `mtime` alone.
+
+The design has three parts:
+
+1. `fs.watch(root, { recursive: true })` for each library.
+2. For each event, `stat` the path, compare its [fingerprint](storage.md#fingerprint), and re-read
+   tags on a difference. Treat all event types alike: macOS reports xattr changes as `rename`.
+3. A full stat walk at startup and every `watch.walk_minutes`, which defaults to 30.
+
+Changes reach the UI in one `files` event at most every 5 seconds. That event follows one refresh of
+the similarity numbers, which rewrites every file's weight and so cannot run per change.
+
+The walk is required. inotify needs a watch per directory and misses remote changes,
+`ReadDirectoryChangesW` can drop events, and `fs.watch` is unreliable on network file systems.
+`fs.watch` on Linux and Windows is untested here.
+
+A changed `ctime` means "read again", not "tags changed". It also moves on `chmod` and hard links,
+which is harmless.
