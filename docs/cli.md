@@ -349,7 +349,7 @@ $ jevonganize facets list
 | `config get [key]` | Print the config, or one key such as `thresholds.apply`. No keys or secrets are in it |
 | `config set <key> <value>` | Validate and save one key. The value is parsed as TOML |
 | `config path` | Print the config, data and cache paths |
-| `config edit` | Open the config in `$VISUAL` or `$EDITOR`, then validate. An invalid file is never saved |
+| `config edit` | Open the config in `$VISUAL` or `$EDITOR` (default `vi`, or `notepad` on Windows), then validate. An invalid file is never saved |
 
 ```text
 $ jevonganize config set thresholds.apply 0.9

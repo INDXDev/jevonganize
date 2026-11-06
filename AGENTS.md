@@ -96,7 +96,7 @@ or the server, read [docs/security.md](docs/security.md). In particular:
 - Never touch real config or keys. Set `JEVONGANIZE_HOME` to a temporary directory.
 - Never write tags outside a temporary directory.
 - `src/core` and `src/ai` have a coverage threshold.
-- Linux and Windows code has not been run. Do not claim it works. Say what you ran, on which OS.
+- CI runs the tests on macOS, Linux and Windows, including real xattrs and NTFS streams. Packaged Linux and Windows apps, Explorer and Dolphin have not been checked. Say what you ran, on which OS.
 - Tag behaviour needs a test that reads the attribute back. A mock of `core/tags.ts` proves nothing about
   it.
 

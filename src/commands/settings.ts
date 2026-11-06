@@ -131,12 +131,13 @@ async function configSet(key: string, text: string, flags: JsonFlag) {
 }
 
 async function configEdit(): Promise<void> {
-  const [editor, ...args] = (process.env.VISUAL ?? process.env.EDITOR ?? 'vi').split(' ');
+  const fallback = process.platform === 'win32' ? 'notepad' : 'vi';
+  const [editor, ...args] = (process.env.VISUAL ?? process.env.EDITOR ?? fallback).split(' ');
   const file = paths.configFile();
   const draft = `${file}.edit.toml`;
   await writeFileAtomic(draft, (await ifExists(readRegularFile(file))) ?? '');
   // No shell. An $EDITOR with arguments is split on spaces.
-  const { status, error } = spawnSync(editor ?? 'vi', [...args, draft], { stdio: 'inherit' });
+  const { status, error } = spawnSync(editor ?? fallback, [...args, draft], { stdio: 'inherit' });
   if (error || status !== 0) throw new UserError(`The editor did not finish. ${draft} is kept`);
   const text = await readFile(draft, 'utf8');
   parseWith(configSchema, parseToml(text, draft), draft);
