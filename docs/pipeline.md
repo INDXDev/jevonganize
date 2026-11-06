@@ -20,7 +20,17 @@ Files are hostile. Only regular files are opened, and nothing found inside a fil
 3. **Match** the file against `[[pipeline]]`, top to bottom. The first match wins.
 4. **Run** each extractor in `use`, in order. Each one only fills what is still empty: `text`, `images`,
    or a `metadata` key that has no value yet.
-5. **Clean** and cap the result, then return it.
+5. **Clean** and cap the result, then return it. Close all task-owned PDF documents in a `finally`.
+
+PDF text and render steps reuse one document and its bounded page text. With `send_images = false`,
+image dimensions and other metadata are still read, but PDF/video rendering and image JPEG encoding
+are skipped. With no image slots or render pages, rendering is skipped too.
+
+The pool keeps at most four workers, retaining idle workers for 10 seconds without keeping the CLI
+alive. Thumbnail tasks can pass queued extraction tasks; background work still gets a turn after
+three thumbnail tasks. Each timeout starts on dispatch, rather than while queued. Successful results
+are copied into a 30-second, 32 MiB / 64-entry memory cache, keyed by file identity, size, nanosecond
+mtime/ctime and extraction settings. Changed files, new settings and warnings prevent stale reuse.
 
 An extractor that throws adds a warning, and the next one runs. If the pipeline ends with no text, no
 images, no extra metadata and at least one warning, the file is marked `failed`. If nothing went

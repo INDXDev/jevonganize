@@ -3,6 +3,7 @@ import type { Config } from '../core/config.ts';
 import type { FileState } from '../types.ts';
 import { extractors, sniff } from './extractors.ts';
 import { renderThumbnail } from './thumbs.ts';
+import { closePdfs } from './pdf.ts';
 
 /** Metadata comes from the file too, and has no budget of its own. */
 const METADATA_CHARS = 500;
@@ -35,12 +36,20 @@ export async function extract(input: {
     warnings: [],
   };
   const row = config.pipeline.find(({ match }) => glob(match).test(mime));
-  for (const id of row?.use ?? []) {
-    try {
-      await extractors[id]!({ ...source, mime }, state, config.budget);
-    } catch (error) {
-      state.warnings.push(`${id}: ${(error as Error).message}`);
+  try {
+    for (const id of row?.use ?? []) {
+      try {
+        await extractors[id]!(
+          { ...source, mime, images: config.send_images },
+          state,
+          config.budget,
+        );
+      } catch (error) {
+        state.warnings.push(`${id}: ${(error as Error).message}`);
+      }
     }
+  } finally {
+    await closePdfs(state);
   }
   for (const [key, value] of Object.entries(state.metadata)) {
     if (typeof value === 'string')

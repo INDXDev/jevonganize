@@ -3,20 +3,28 @@ import { sep } from 'node:path';
 import type { FileQuery, FileRow, FolderCount, SimilarFile, Tag } from '../../types.ts';
 import type { Sql } from './connection.ts';
 import { compileQuery, FILE_COLUMNS, orderBy, type RawFileRow, toFileRow } from './file-query.ts';
-import { type FileRecord, fileRow } from './files.ts';
+import type { FileRecord } from './files.ts';
 import { folderRange } from './paths.ts';
 
 /** Runs a `FileQuery`. Without `limit` it returns every match, so callers bound what they show. */
 export function searchFiles(sql: Sql, query: FileQuery): { files: FileRow[]; total: number } {
   const { matches, from, params, ranked } = compileQuery(query);
-  const { n } = sql.get<{ n: number }>(`${matches} SELECT count(*) AS n ${from}`, ...params)!;
-  const rows = sql.all<RawFileRow>(
-    `${matches} SELECT ${FILE_COLUMNS} ${from}
-     ORDER BY ${orderBy(query, ranked)} LIMIT ? OFFSET ?`,
-    ...params,
-    query.limit ?? -1,
-    query.offset ?? 0,
+  const countSql = `${matches} SELECT count(*) AS n ${from}`;
+  const n = sql.cachedCount(
+    JSON.stringify([countSql, params]),
+    () => sql.get<{ n: number }>(countSql, ...params)!.n,
   );
+  const order = orderBy(query, ranked);
+  const indexedName = query.sort === 'name' || (!ranked && query.sort === undefined);
+  const paged = query.limit !== undefined && !indexedName;
+  const statement = paged
+    ? `${matches}${matches ? ',' : 'WITH'} page AS MATERIALIZED (
+       SELECT f.id${ranked ? ', c.rank' : ''} ${from}
+       ORDER BY ${order} LIMIT ? OFFSET ?)
+     SELECT ${FILE_COLUMNS} FROM page p JOIN file f ON f.id = p.id
+     ORDER BY ${order.replaceAll('c.rank', 'p.rank')}`
+    : `${matches} SELECT ${FILE_COLUMNS} ${from} ORDER BY ${order} LIMIT ? OFFSET ?`;
+  const rows = sql.all<RawFileRow>(statement, ...params, query.limit ?? -1, query.offset ?? 0);
   return { files: rows.map(toFileRow), total: n };
 }
 
@@ -75,8 +83,14 @@ export function similarFiles(sql: Sql, id: number, limit = 20): SimilarFile[] {
       )
       .map((row) => row.name),
   );
+  if (!hits.length) return [];
+  const rows = sql.all<RawFileRow>(
+    `SELECT ${FILE_COLUMNS} FROM file f WHERE f.id IN (SELECT value FROM json_each(?))`,
+    JSON.stringify(hits.map((hit) => hit.file_id)),
+  );
+  const byId = new Map(rows.map((row) => [row.id, toFileRow(row)]));
   return hits.map(({ file_id, score }) => {
-    const row = fileRow(sql, file_id)!;
+    const row = byId.get(file_id)!;
     return { ...row, score, shared: row.tags.filter((tag) => mine.has(tag)) };
   });
 }

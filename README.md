@@ -181,6 +181,7 @@ chose, and there is no silent fallback to another one.
 | `organize --dry-run`, cost estimates                 | Nothing                                                                                                                  |                    |
 | Apply, undo, tag changes                             | Nothing                                                                                                                  |                    |
 | Interface language and PC language detection         | Nothing                                                                                                                  |                    |
+| Short-lived extraction and hash caches               | Nothing; bounded process memory only                                                                                     |                    |
 | Organize                                             | Per file: its name but not its folder, up to 8,000 characters of text, up to 2 small images, metadata, and the questions | Your provider      |
 | Tag suggestions                                      | The same, plus your tag vocabulary                                                                                       | Your chat provider |
 | Verifying a suggestion                               | The same state again, and one yes-or-no question per candidate tag                                                       | Your provider      |

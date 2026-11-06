@@ -51,3 +51,44 @@ describe('tags', () => {
     });
   });
 });
+
+describe('similarity invalidation', () => {
+  it('skips unchanged scans and provenance changes, but refreshes memberships, counts and weights', () => {
+    const id = tagged('/a', ['project:x']);
+    expect(db.refreshIdf()).toBe(true);
+    expect(db.refreshIdf()).toBe(false);
+    db.setTagFacets([{ id: 'project', weight: 2 }]);
+    expect(db.refreshIdf()).toBe(true);
+    db.setTagFacets([{ id: 'project', weight: 2 }]);
+    db.addFileTags(id, ['project:x'], true);
+    db.addLibrary('/');
+    db.markScanned('/');
+    db.setFileResult(id, { status: 'organized' });
+    expect(db.refreshIdf()).toBe(false);
+    const before = db.fileById(id)!.tag_w;
+    const other = addFile('/b');
+    expect(db.refreshIdf()).toBe(true);
+    expect(db.fileById(id)!.tag_w).toBeGreaterThan(before);
+    db.addFileTags(other, ['project:x'], false);
+    expect(db.refreshIdf()).toBe(true);
+    db.removeFileTags(other, ['project:x']);
+    expect(db.refreshIdf()).toBe(true);
+    db.deleteFile(other);
+    expect(db.refreshIdf()).toBe(true);
+  });
+
+  it('rolls back the dirty flag and rebuilt weights together', () => {
+    const id = tagged('/a', ['t']);
+    db.refreshIdf();
+    const before = db.fileById(id)!.tag_w;
+    expect(() =>
+      db.transaction(() => {
+        addFile('/b');
+        expect(db.refreshIdf()).toBe(true);
+        throw new Error('rollback');
+      }),
+    ).toThrow('rollback');
+    expect(db.fileById(id)!.tag_w).toBe(before);
+    expect(db.refreshIdf()).toBe(false);
+  });
+});

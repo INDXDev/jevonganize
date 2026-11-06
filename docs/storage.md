@@ -283,3 +283,16 @@ Real tag distributions, cold disks and network volumes will differ.
 
 The exact similarity query is used. Skipping common tags made it faster, but lost 20 to 27 percent of
 the top 50.
+
+## Reusing local work
+
+Extraction results are kept only in a bounded process-memory cache for 30 seconds, up to 32 MiB and
+64 entries, with a fresh regular-file and fingerprint check on access. Pipeline, budget and image
+settings are part of the key. Content hashes have a bounded fingerprint-keyed memory cache as well;
+their `f1:`/`p1:` SHA-256 formats are unchanged. No new file-content cache is written to disk.
+
+Concurrent requests for the same thumbnail share one generation. Search totals are cached until
+local SQLite changes or a different connection's data version changes. Page rows and tags are read
+fresh, with only the requested page's tags hydrated. IDF and file weights are rebuilt only when
+file counts, tag memberships or facet weights changed, tracked transactionally in schema version 3.
+Similarity remains exact, including common tags, zero weights and deterministic ties.

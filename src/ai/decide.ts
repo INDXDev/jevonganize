@@ -233,9 +233,16 @@ export async function decide(
   facets: Facet[],
   model: ResolvedModel,
   db: AnswerStore,
-): Promise<{ answers: Answer[]; tokens: number; cached: number; warnings: string[] }> {
+): Promise<{
+  answers: Answer[];
+  tokens: number;
+  cached: number;
+  warnings: string[];
+  state_hash: string;
+}> {
   const { state, warnings } = fitState(file.state, model.caps);
-  const asked = askedFacets(facets, model, hashFitted(state));
+  const state_hash = hashFitted(state);
+  const asked = askedFacets(facets, model, state_hash);
 
   // No await until `inFlight` is filled, so two identical files cannot both miss.
   const { known, missing } = lookUp(asked, db);
@@ -252,5 +259,5 @@ export async function decide(
   });
 
   const answers = (await Promise.all([...known, ...fresh])).flat();
-  return { answers, tokens: (await request).tokens, cached: known.length, warnings };
+  return { answers, tokens: (await request).tokens, cached: known.length, warnings, state_hash };
 }

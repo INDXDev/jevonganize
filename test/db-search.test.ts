@@ -253,3 +253,26 @@ describe('similarFiles', () => {
     expect(db.fileById(id)!.tag_w).toBeCloseTo(before / 2);
   });
 });
+
+describe('cached search totals', () => {
+  it('reuses totals across pages and invalidates local updates and rollbacks', () => {
+    const a = addFile('/a');
+    expect(db.searchFiles({ limit: 1 }).total).toBe(1);
+    expect(db.searchFiles({ offset: 1, limit: 1, sort: 'size' }).total).toBe(1);
+    expect(() =>
+      db.transaction(() => {
+        addFile('/b');
+        expect(db.searchFiles({}).total).toBe(2);
+        throw new Error('rollback');
+      }),
+    ).toThrow('rollback');
+    expect(db.searchFiles({}).total).toBe(1);
+    expect(db.searchFiles({ status: 'organized' }).total).toBe(0);
+    db.setFileResult(a, { status: 'organized' });
+    expect(db.searchFiles({ status: 'organized' }).total).toBe(1);
+    db.setContent(a, 'searchable content');
+    expect(db.searchFiles({ text: 'searchable' }).total).toBe(1);
+    db.setContent(a, 'different text');
+    expect(db.searchFiles({ text: 'searchable' }).total).toBe(0);
+  });
+});

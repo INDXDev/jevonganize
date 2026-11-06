@@ -42,27 +42,42 @@ async function openFacetsOf(config: Config): Promise<Facet[]> {
 }
 
 /** Same facet, and labels equal but for punctuation, or one extending the other. */
-// shortcut: compares every pair, group by facet if tag counts reach the tens of thousands.
 function nearDuplicates(counts: TagCount[]): CleanupReport['near_duplicates'] {
-  const rows = counts.map((row) => ({
-    ...row,
-    facet: tagFacet(row.tag),
-    bare: lettersAndDigits(row.tag),
-    extensionPrefix: `${row.tag}-`,
-  }));
-  const found: CleanupReport['near_duplicates'] = [];
-  rows.forEach((a, index) => {
-    for (let next = index + 1; next < rows.length; next++) {
-      const b = rows[next]!;
-      const near =
-        a.bare === b.bare ||
-        a.tag.startsWith(b.extensionPrefix) ||
-        b.tag.startsWith(a.extensionPrefix);
-      if (near && a.facet === b.facet) {
-        found.push({ tags: [a.tag, b.tag], files: a.count + b.count });
-      }
+  const bare = new Map<string, number[]>();
+  const names = new Map<string, number[]>();
+  const matches = new Map<number, Set<number>>();
+  const pair = (a: number, b: number) => {
+    const low = Math.min(a, b),
+      high = Math.max(a, b);
+    let next = matches.get(low);
+    if (!next) matches.set(low, (next = new Set()));
+    next.add(high);
+  };
+  counts.forEach((row, index) => {
+    const facet = tagFacet(row.tag);
+    const key = JSON.stringify([facet, lettersAndDigits(row.tag)]);
+    const group = bare.get(key) ?? [];
+    for (const other of group) pair(other, index);
+    group.push(index);
+    bare.set(key, group);
+    const nameKey = JSON.stringify([facet, row.tag]);
+    names.set(nameKey, [...(names.get(nameKey) ?? []), index]);
+  });
+  counts.forEach((row, index) => {
+    const facet = tagFacet(row.tag);
+    for (let at = row.tag.indexOf('-'); at >= 0; at = row.tag.indexOf('-', at + 1)) {
+      for (const other of names.get(JSON.stringify([facet, row.tag.slice(0, at)])) ?? [])
+        pair(other, index);
     }
   });
+  const found: CleanupReport['near_duplicates'] = [];
+  for (const [index, others] of [...matches].toSorted(([a], [b]) => a - b)) {
+    const a = counts[index]!;
+    for (const next of [...others].toSorted((left, right) => left - right)) {
+      const b = counts[next]!;
+      found.push({ tags: [a.tag, b.tag], files: a.count + b.count });
+    }
+  }
   return found;
 }
 

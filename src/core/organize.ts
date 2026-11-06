@@ -141,6 +141,7 @@ async function askModels(session: Session, id: number, state: FileState, facets:
   const { db, models, modelLimit, tally } = session;
   const answers: Answer[] = [];
   const warnings: string[] = [];
+  let hash: string | undefined;
   for (const [profile, model] of models) {
     const group = facets.filter((facet) => asksModel(facet) && facet.profile === profile);
     if (group.length === 0) continue;
@@ -148,10 +149,11 @@ async function askModels(session: Session, id: number, state: FileState, facets:
     const result = await modelLimit(() => decide({ state, onTokens }, group, model, db));
     answers.push(...result.answers);
     warnings.push(...result.warnings);
-    const hash = stateHash(state, model);
-    for (const facet of group) db.linkAnswer(id, facet.id, answerKey(model, facet, hash));
+    if (model === session.hashTarget) hash = result.state_hash;
+    for (const facet of group)
+      db.linkAnswer(id, facet.id, answerKey(model, facet, result.state_hash));
   }
-  return { answers, warnings };
+  return { answers, warnings, state_hash: hash ?? stateHash(state, session.hashTarget) };
 }
 
 /** The tags this run may drop or replace on a file. */
@@ -198,14 +200,13 @@ async function planFile(
 ): Promise<void> {
   const { config, facets, tally } = session;
   const applicable = facets.filter((facet) => appliesTo(facet, state.mime));
-  const { answers, warnings } = await askModels(session, row.id, state, applicable);
+  const { answers, warnings, state_hash } = await askModels(session, row.id, state, applicable);
   tally.warnings.push(...warnings.map((warning) => `${row.path}: ${warning}`));
 
   const derived = applicable.flatMap((facet) => derive(facet, state, config) ?? []);
   const { add, remove, review } = planChange(session, row.id, applicable, { answers, derived });
   tally.ops.push({ file_id: row.id, add, remove, stamp });
   const { mime, metadata } = state;
-  const state_hash = stateHash(state, session.hashTarget);
   const result = { status: 'organized' as const, hash, state_hash, mime, metadata };
   tally.results.push({ id: row.id, result, review });
 }

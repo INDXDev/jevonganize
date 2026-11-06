@@ -8,7 +8,7 @@ import { configSchema, paths } from '../core/config.ts';
 import type { FileRow, FileState } from '../types.ts';
 import { extractors, sniff } from './extractors.ts';
 import { picture } from './images.ts';
-import { openPdf, renderPage } from './pdf.ts';
+import { closePdfs, openPdf, renderPage } from './pdf.ts';
 import { runTask } from './index.ts';
 
 /** shortcut: fixed, since `thumbnail` takes no config, pass the budget in if users need to tune it. */
@@ -44,13 +44,17 @@ const exists = (path: string) =>
   );
 
 /** The words a page thumbnail shows, and its title if the file names one. Empty if it has none. */
-async function pageText(path: string, mime: string) {
+async function pageText(path: string, mime: string, deadline: number) {
   const uses = PAGE_SOURCES.find(([pattern]) => pattern.test(mime))?.[1] ?? [];
   const { size } = await lstat(path);
-  const file = { path, name: path, mime, size, deadline: Date.now() + TIMEOUT_MS };
+  const file = { path, name: path, mime, size, deadline, images: false };
   const state: FileState = { text: '', images: [], metadata: {}, warnings: [] };
   const { budget } = configSchema.parse({});
-  for (const id of uses) await extractors[id]!(file, state, budget).catch(() => undefined);
+  try {
+    for (const id of uses) await extractors[id]!(file, state, budget).catch(() => undefined);
+  } finally {
+    await closePdfs(state);
+  }
   const { title } = state.metadata;
   return {
     title: typeof title === 'string' ? title.trim() : '',
@@ -153,7 +157,7 @@ async function drawPage(
   return canvas.encode('png');
 }
 
-async function decode(path: string, size: number): Promise<Sharp> {
+async function decode(path: string, size: number, deadline: number): Promise<Sharp> {
   const mime = await sniff(path);
   if (mime.startsWith('image/')) return picture(path, mime);
   const { default: sharp } = await import('sharp');
@@ -165,16 +169,21 @@ async function decode(path: string, size: number): Promise<Sharp> {
       await doc.loadingTask.destroy();
     }
   }
-  const page = await pageText(path, mime);
+  const page = await pageText(path, mime, deadline);
   if (!page.text.trim() && !page.title) throw new Error(`no thumbnail for ${mime}`);
   return sharp(await drawPage(mime, page, size));
 }
 
 /** Worker task: writes the webp under a temp name, then renames it into place. */
-export async function renderThumbnail(input: { path: string; size: number; out: string }) {
+export async function renderThumbnail(input: {
+  path: string;
+  size: number;
+  out: string;
+  deadline: number;
+}) {
   const temp = `${input.out}.${randomUUID()}.tmp`;
   try {
-    const image = await decode(input.path, input.size);
+    const image = await decode(input.path, input.size, input.deadline);
     await image
       .autoOrient()
       .resize({ width: input.size, height: input.size, fit: 'inside', withoutEnlargement: true })
@@ -186,6 +195,8 @@ export async function renderThumbnail(input: { path: string; size: number; out: 
     throw error;
   }
 }
+
+const inFlight = new Map<string, Promise<string | null>>();
 
 /**
  * The path of a cached webp, or null if this file has none. `hash` is `file.hash`, which `FileRow`
@@ -207,12 +218,27 @@ export async function thumbnail(
   const fail = join(dir, `${key}-${size}.fail`);
   if (await exists(out)) return out;
   if ((await exists(fail)) || info.size > MAX_BYTES) return null;
-  await mkdir(dir, { recursive: true });
+  const pending = inFlight.get(out);
+  if (pending) return pending;
+  const generate = async () => {
+    await mkdir(dir, { recursive: true });
+    try {
+      await runTask(
+        'renderThumbnail',
+        () => ({ path: file.path, size, out, deadline: Date.now() + TIMEOUT_MS }),
+        TIMEOUT_MS,
+      );
+      return out;
+    } catch {
+      await writeFile(fail, '');
+      return null;
+    }
+  };
+  const running = generate();
+  inFlight.set(out, running);
   try {
-    await runTask('renderThumbnail', { path: file.path, size, out }, TIMEOUT_MS);
-    return out;
-  } catch {
-    await writeFile(fail, ''); // a hostile file is parsed once, not on every view
-    return null;
+    return await running;
+  } finally {
+    inFlight.delete(out);
   }
 }

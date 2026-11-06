@@ -10,6 +10,8 @@ export interface SourceFile {
   size: number;
   mime: string;
   deadline: number;
+  /** False when pixels would be discarded; dimensions and metadata are still needed. */
+  images?: boolean;
 }
 
 /** One step of the pipeline. It fills `state`, and leaves what an earlier step wrote alone. */

@@ -16,7 +16,8 @@ import type { Config } from './config.ts';
 import { ifExists, UserError } from './config.ts';
 import type { Db, FileRecord, Fingerprint, MirrorTag } from './db.ts';
 import { type Excluded, exclusions, secretRoot } from './exclusions.ts';
-import { overwriteDropsTags, readTags } from './tags.ts';
+import { overwriteDropsTags } from './tags.ts';
+import { readScanTags } from './tag-reader.ts';
 
 const BATCH_SIZE = 256;
 
@@ -83,8 +84,11 @@ const sameFingerprint = (row: FileRecord, now: Fingerprint) =>
   row.path === now.path && sameContent(row, now) && row.ctime_ns === now.ctime_ns;
 
 /** The row this path continues: its own, or that of a file that left its old path. */
-async function priorRow(db: Db, now: Fingerprint): Promise<FileRecord | undefined> {
-  const own = db.fileByPath(now.path);
+async function priorRow(
+  db: Db,
+  now: Fingerprint,
+  own: FileRecord | undefined,
+): Promise<FileRecord | undefined> {
   if (own) return own;
   for (const row of db.filesByInode(now.dev, now.ino)) {
     if (!(await ifExists(lstat(row.path)))) return row; // still there means a hard link
@@ -104,20 +108,21 @@ async function observe(
   path: string,
   result: ScanResult,
   seen: Set<number>,
-): Promise<Observation | null> {
+  own: FileRecord | undefined,
+): Promise<Omit<Observation, 'tags'> | null> {
   try {
     const info = await ifExists(lstat(path, { bigint: true }));
     if (!info?.isFile()) return null; // it can turn into a link after the walk saw it
     result.files++;
     const now = fingerprint(path, info);
-    const row = await priorRow(db, now);
+    const row = await priorRow(db, now, own);
     if (row) seen.add(row.id);
     if (row && sameFingerprint(row, now)) return null;
-    return { now, row, tags: await readTags(path) };
+    return { now, row };
   } catch (error) {
     // The old fingerprint stays, so the next scan tries again. A failed lstat never reached `seen`.
-    const own = db.fileByPath(path);
-    if (own) seen.add(own.id);
+    const latest = db.fileByPath(path) ?? own;
+    if (latest) seen.add(latest.id);
     result.warnings.push(`Could not read ${path}: ${(error as Error).message}`);
     return null;
   }
@@ -164,13 +169,26 @@ function recordObservation(
 
 /** Handles one batch: async reads first, since a transaction must not span an `await`. */
 async function scanBatch(db: Db, batch: string[], result: ScanResult, seen: Set<number>) {
-  const observed = await Promise.all(batch.map((path) => observe(db, path, result, seen)));
-  db.transaction(() => {
-    for (const observation of observed) {
-      if (observation) recordObservation(db, observation, result, seen);
-    }
-  });
-  await yieldToLoop(); // tag reads and SQLite are synchronous, so nothing else ran until now
+  const known = new Map(db.filesByPaths(batch).map((row) => [row.path, row]));
+  const observed = (
+    await Promise.all(batch.map((path) => observe(db, path, result, seen, known.get(path))))
+  ).filter((item) => item !== null);
+  const reads = await readScanTags(observed.map((item) => item.now.path));
+  if (observed.length)
+    db.transaction(() => {
+      for (let index = 0; index < observed.length; index++) {
+        const observation = observed[index]!;
+        const read = reads[index]!;
+        if ('error' in read) {
+          const latest = db.fileByPath(read.path);
+          if (latest) seen.add(latest.id);
+          result.warnings.push(`Could not read ${read.path}: ${read.error}`);
+          continue;
+        }
+        recordObservation(db, { ...observation, tags: read.tags }, result, seen);
+      }
+    });
+  await yieldToLoop(); // SQLite writes must not keep other server requests waiting across batches
 }
 
 const emptyResult = (): ScanResult => ({

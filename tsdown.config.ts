@@ -5,6 +5,7 @@ export default defineConfig({
     cli: 'src/cli.ts',
     'server/start': 'src/server/start.ts',
     'extract/worker': 'src/extract/worker.ts',
+    'core/tag-worker': 'src/core/tag-worker.ts',
     'desktop/main': 'src/desktop/main.ts',
   },
   format: 'esm',

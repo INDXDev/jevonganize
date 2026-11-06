@@ -172,7 +172,7 @@ describe('cache', () => {
     const { spy, model } = setup();
     const open: Facet = { ...flagFacet('party'), kind: 'multi', open: true, values: {} };
     const result = await decide({ state: state() }, [fieldFacet, open], model, store());
-    expect(result).toEqual({ answers: [], tokens: 0, cached: 0, warnings: [] });
+    expect(result).toMatchObject({ answers: [], tokens: 0, cached: 0, warnings: [] });
     expect(spy).not.toHaveBeenCalled();
   });
 

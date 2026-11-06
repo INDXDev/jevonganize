@@ -6,6 +6,12 @@ This project follows [Semantic Versioning](https://semver.org).
 
 First version, not released yet.
 
+- Reuse extraction workers, PDF parses and recent unchanged extraction results; skip image rendering
+  and encoding when images are disabled. Merge simultaneous thumbnail requests and prioritize
+  previews over queued background extraction.
+- Speed up scan tag reads, search pages, exact similarity and tag cleanup. Unchanged scans no longer
+  rebuild all similarity weights. Installation and build commands need no new dependencies.
+
 - Follow the PC's language by default, with English, Japanese and Simplified Chinese interfaces.
   Override it in Settings or with `config set language en|ja|zh-CN|system`; CLI help and the shared
   browser/desktop UI use the same preference.

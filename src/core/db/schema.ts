@@ -55,6 +55,29 @@ ALTER TABLE plan ADD COLUMN claimed_at INTEGER;
 CREATE TABLE plan_op (plan_id TEXT NOT NULL, file_id INTEGER NOT NULL, body TEXT NOT NULL,
   PRIMARY KEY (plan_id, file_id)) WITHOUT ROWID;
 `,
+  `
+CREATE TABLE similarity_state (id INTEGER PRIMARY KEY CHECK (id = 1), dirty INTEGER NOT NULL);
+INSERT INTO similarity_state VALUES (1, 1);
+CREATE TRIGGER similarity_file_insert AFTER INSERT ON file
+WHEN (SELECT dirty FROM similarity_state WHERE id = 1) = 0
+BEGIN UPDATE similarity_state SET dirty = 1 WHERE id = 1; END;
+CREATE TRIGGER similarity_file_delete AFTER DELETE ON file
+WHEN (SELECT dirty FROM similarity_state WHERE id = 1) = 0
+BEGIN UPDATE similarity_state SET dirty = 1 WHERE id = 1; END;
+CREATE TRIGGER similarity_tag_insert AFTER INSERT ON file_tag
+WHEN (SELECT dirty FROM similarity_state WHERE id = 1) = 0
+BEGIN UPDATE similarity_state SET dirty = 1 WHERE id = 1; END;
+CREATE TRIGGER similarity_tag_delete AFTER DELETE ON file_tag
+WHEN (SELECT dirty FROM similarity_state WHERE id = 1) = 0
+BEGIN UPDATE similarity_state SET dirty = 1 WHERE id = 1; END;
+CREATE TRIGGER similarity_tag_update AFTER UPDATE OF tag_id, file_id ON file_tag
+WHEN (old.tag_id <> new.tag_id OR old.file_id <> new.file_id)
+ AND (SELECT dirty FROM similarity_state WHERE id = 1) = 0
+BEGIN UPDATE similarity_state SET dirty = 1 WHERE id = 1; END;
+CREATE TRIGGER similarity_weight_update AFTER UPDATE OF weight ON tag
+WHEN old.weight <> new.weight AND (SELECT dirty FROM similarity_state WHERE id = 1) = 0
+BEGIN UPDATE similarity_state SET dirty = 1 WHERE id = 1; END;
+`,
 ];
 
 /** The schema version of this index. */

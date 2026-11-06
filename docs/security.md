@@ -106,7 +106,9 @@ document's author.
 
 There is no telemetry and no Jevonganize server. Answers stored locally hold labels, numbers and keys,
 never content. The index does hold extracted text for search, in `index.db` on your disk. Data and
-cache directories are created with mode `0700`.
+cache directories are created with mode `0700`. Successful extraction results can also stay in
+process memory for up to 30 seconds, bounded to 32 MiB and 64 entries. This cache is local, is never
+written to disk, and checks current file identity/times and extraction settings before reuse.
 
 ### Per provider
 

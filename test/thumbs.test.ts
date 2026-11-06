@@ -2,8 +2,9 @@ import { mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:f
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import sharp from 'sharp';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { paths } from '../src/core/config.ts';
+import { workerPool } from '../src/extract/index.ts';
 import { thumbnail } from '../src/extract/thumbs.ts';
 import type { FileRow } from '../src/types.ts';
 
@@ -140,5 +141,23 @@ describe('thumbnail failures', slow, () => {
     expect(await thumbnail(row(link, 'f1:99'), 256)).toBeNull();
     expect(await thumbnail(row(join(home, 'gone.jpg'), 'f1:99'), 256)).toBeNull();
     await expect(stat(join(paths.thumbnails(), '99'))).rejects.toThrow('ENOENT');
+  });
+});
+
+describe('concurrent thumbnails', slow, () => {
+  it('generates one webp for simultaneous requests and separates output sizes', async () => {
+    const run = vi.spyOn(workerPool(), 'run');
+    try {
+      const file = row(fixture('photo.jpg'), 'f1:shared001');
+      const outputs = await Promise.all(Array.from({ length: 10 }, () => thumbnail(file, 256)));
+      expect(new Set(outputs).size).toBe(1);
+      expect(outputs[0]).not.toBeNull();
+      expect(run).toHaveBeenCalledTimes(1);
+      expect((await sharp(outputs[0]!).metadata()).format).toBe('webp');
+      expect(await thumbnail(file, 1024)).not.toBe(outputs[0]);
+      expect(run).toHaveBeenCalledTimes(2);
+    } finally {
+      run.mockRestore();
+    }
   });
 });

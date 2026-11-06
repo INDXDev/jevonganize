@@ -11,7 +11,7 @@ setupMemoryDb();
 describe('openDb', () => {
   it('creates the default index in WAL mode, in a 0700 directory', async () => {
     const opened = openDb();
-    expect(opened.schemaVersion()).toBe(2);
+    expect(opened.schemaVersion()).toBe(3);
     opened.close();
     const raw = new DatabaseSync(paths.database());
     expect(raw.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
@@ -26,11 +26,16 @@ describe('openDb', () => {
     first.addLibrary('/lib');
     first.close();
     const raw = new DatabaseSync(file);
+    for (const { name } of raw
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'similarity_%'")
+      .all() as { name: string }[])
+      raw.exec(`DROP TRIGGER ${name}`);
+    raw.exec('DROP TABLE similarity_state');
     raw.exec(`DROP INDEX file_name; DROP TABLE plan_op; ALTER TABLE plan DROP COLUMN claimed_at;
       PRAGMA user_version = 1`);
     raw.close();
     const second = openDb(file);
-    expect(second.schemaVersion()).toBe(2);
+    expect(second.schemaVersion()).toBe(3);
     expect(second.listLibraries().map((library) => library.path)).toEqual(['/lib']);
     second.close();
   });

@@ -38,7 +38,7 @@ export const media: Extractor = async (file, state) => {
 /** Takes evenly spaced frames, or one from the start when `media` found no duration. */
 export const ffmpegFrames: Extractor = async (file, state, budget) => {
   const ffmpeg = findTool('ffmpeg');
-  if (!ffmpeg || state.images.length) return;
+  if (file.images === false || budget.images === 0 || !ffmpeg || state.images.length) return;
   const { default: sharp } = await import('sharp');
   const duration = Number(state.metadata.duration) || 0;
   const count = duration ? budget.images : Math.min(1, budget.images);

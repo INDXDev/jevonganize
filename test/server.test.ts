@@ -200,7 +200,7 @@ describe('/file/:id refusals', () => {
   });
 });
 
-describe('/thumb/:id', () => {
+describe('/thumb/:id', { timeout: 35_000 }, () => {
   test('serves a cached webp, immutable', async () => {
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',

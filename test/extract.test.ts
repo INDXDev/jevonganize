@@ -21,7 +21,7 @@ describe('sniffing', () => {
     ['Dockerfile', 'text/plain'],
     ['noise.bin', 'application/octet-stream'],
   ])('%s is %s', async (name, mime) => {
-    expect((await extract(name)).mime).toBe(mime);
+    expect((await extract(name, {}, { pipeline: [] })).mime).toBe(mime);
   });
 
   it('trusts bytes over the extension', async () => {

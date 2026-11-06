@@ -133,6 +133,17 @@ thumbnail(file: FileRow, size: 256 | 1024): Promise<string | null>   // path to 
 ```
 
 Extractors run in pipeline order and only fill what is still empty. See [pipeline.md](pipeline.md).
+A task owns its PDF handles and page text until all steps finish, and closes them even on failure.
+`SourceFile.images` tells image-producing steps whether pixels are needed; metadata is still read.
+The shared extraction pool retains idle workers for 10 seconds, with at most four workers. Queued
+thumbnail work has priority, with a background task after three foreground tasks to prevent starvation.
+Timeouts and external-tool deadlines start when a task leaves the queue.
+
+Successful extraction results may be reused in process for 30 seconds, up to 32 MiB and 64 entries.
+The key includes the absolute path, device/inode, size, nanosecond mtime/ctime, pipeline, budgets and
+image setting. A fresh regular-file check precedes every lookup, results are copied for each caller,
+and files that change during extraction or produce warnings are not cached. Nothing extra is persisted.
+Concurrent thumbnail requests for one output share one generation; different sizes remain independent.
 
 ## Decisions: `ai/`
 
@@ -140,7 +151,7 @@ Extractors run in pipeline order and only fill what is still empty. See [pipelin
 resolveModel(config: Config, profile?: string): Promise<ResolvedModel>  // UserError with no key, unless `chat` or `compatible` has a base_url
 decide(file: { state: FileState; onTokens?: (tokens: number) => void },  // each billed call, refused or later failed included
        facets: Facet[], model: ResolvedModel, db: Db)
-  : Promise<{ answers: Answer[]; tokens: number; cached: number; warnings: string[] }>
+  : Promise<{ answers: Answer[]; tokens: number; cached: number; warnings: string[]; state_hash: string }>
 suggest(state: FileState, vocabulary: Tag[], model: ResolvedModel): Promise<Tag[]>
 chat(messages: UIMessage[], ctx: Context): Response                     // streaming
 estimateCost(tokens: number, model: ResolvedModel): number | null
@@ -214,6 +225,20 @@ CREATE TABLE vocabulary (facet TEXT NOT NULL, value TEXT NOT NULL,
   PRIMARY KEY (facet, value));
 CREATE VIRTUAL TABLE content USING fts5(text, tokenize='trigram');   -- rowid = file.id
 ```
+
+The internal scan tag reader checks regular files again, reports each failure separately, and never
+writes tags. Batches of 32 or more paths run in a separate worker; smaller batches avoid worker
+startup and yield between regular-file checks. Discovery, exclusions, move detection and mirror transactions stay in the scan flow.
+
+Schema version 3 also keeps one `similarity_state` row with a `dirty` flag. Triggers mark it dirty
+when files or tag memberships are inserted/deleted or similarity weights change. An IDF refresh
+rebuilds weights and clears the flag atomically; an unchanged scan does not rebuild them. The flag
+is shared across connections and rolls back with its transaction.
+
+Search totals may be cached per connection, bounded to 128 query shapes. Local total changes and
+SQLite's data version invalidate them, including writes from another process. Paging and sorting
+reuse the same total, while result rows are always selected afresh. Indexed name scans keep their index traversal. Other bounded sorts select page ids before loading
+tag arrays. Similarity still ranks every candidate with the exact weighted formula.
 
 `PRAGMA user_version` holds the schema version. Migrations are a list of SQL strings applied in
 order. An index from a newer version is refused, never altered.

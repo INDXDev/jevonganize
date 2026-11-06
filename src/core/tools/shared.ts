@@ -67,8 +67,10 @@ export const planSource = ({ caller }: Context): Plan['source'] =>
 
 /** Stamps tags with their facet and weight, then refreshes the numbers similarity reads. */
 export function refreshTags(db: Db, facets: Facet[]): void {
-  db.setTagFacets(facets);
-  db.refreshIdf();
+  db.transaction(() => {
+    db.setTagFacets(facets);
+    db.refreshIdf();
+  });
 }
 
 /** Tells front ends how many reviews are open. */

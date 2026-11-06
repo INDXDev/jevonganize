@@ -72,7 +72,7 @@ export const image: Extractor = async (file, state, budget) => {
   const { width, height, autoOrient } = await decoded.metadata();
   put(state, 'width', autoOrient?.width ?? width);
   put(state, 'height', autoOrient?.height ?? height);
-  if (!state.images.length) await addImage(state, budget, decoded, 'file');
+  if (file.images !== false && !state.images.length) await addImage(state, budget, decoded, 'file');
 };
 
 /** EXIF has no zone. Reading it as UTC keeps the state the same on every machine. */

@@ -201,7 +201,13 @@ Directories come from `env-paths`, so they follow each OS's convention.
 
 - The server process owns the database. `jevonganize mcp` and CLI commands open the same file; WAL
   and a busy timeout let them share it.
-- Extraction runs in a `piscina` worker pool. A parser that hangs is terminated on timeout, and a
+- Extraction runs in a `piscina` worker pool with up to four workers retained for 10 idle seconds.
+  Thumbnail work takes priority over queued extraction, with bounded fairness. Successful results
+  have a bounded 30-second memory cache, invalidated by file identity/times and extraction settings.
+  PDF steps share one task-local document and page text; no document handles survive a task.
+  Tag reads for batches of 32 or more changed scan files run in a separate worker. Small batches
+  yield between reads without paying for worker startup.
+  A parser that hangs is terminated on timeout, and a
   parser error fails one file rather than the job. A native crash ends the server, so a job can be
   run again; cached answers make that cheap.
 - Model calls run under `p-limit`, at `concurrency` from config.

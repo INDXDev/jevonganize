@@ -129,3 +129,45 @@ describe('suggest_tags', () => {
     );
   });
 });
+
+const cleanupBare = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+const cleanupFacet = (s: string) =>
+  s.startsWith('flag:') ? s.slice(5) : s.slice(0, Math.max(s.indexOf(':'), 0));
+
+describe('cleanup candidate indexing', () => {
+  test('preserves exact pairs and their order for punctuation, prefixes and Unicode', async () => {
+    await scanned('cleanup.txt');
+    const tags = [
+      'project:a',
+      'project:a-b',
+      'project:a-b-c',
+      'project:ab',
+      'project:a_b',
+      'topic:a',
+      'topic:a-b',
+      'topic:Ａ',
+      'topic:日本-語',
+      'topic:日本語',
+      'plain',
+      'plain-more',
+      'plain_more',
+    ];
+    for (let i = 0; i < 100; i++) tags.push(`facet-${i % 7}:value-${i}`);
+    ctx.db.addFileTags(idOf('cleanup.txt'), tags, false);
+    const counts = ctx.db.tagCounts();
+    const expected: { tags: string[]; files: number }[] = [];
+    for (let a = 0; a < counts.length; a++)
+      for (let b = a + 1; b < counts.length; b++) {
+        const one = counts[a]!,
+          two = counts[b]!;
+        if (
+          cleanupFacet(one.tag) === cleanupFacet(two.tag) &&
+          (cleanupBare(one.tag) === cleanupBare(two.tag) ||
+            one.tag.startsWith(`${two.tag}-`) ||
+            two.tag.startsWith(`${one.tag}-`))
+        )
+          expected.push({ tags: [one.tag, two.tag], files: one.count + two.count });
+      }
+    expect((await callTool('cleanup_report', {}, ctx)).near_duplicates).toEqual(expected);
+  });
+});

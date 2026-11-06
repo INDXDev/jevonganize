@@ -65,6 +65,14 @@ export const fileByPath = (sql: Sql, path: string) =>
 export const fileById = (sql: Sql, id: number) =>
   sql.get<FileRecord>('SELECT * FROM file WHERE id = ?', id);
 
+/** Stored rows for one bounded scan batch, without a query per path. */
+export function filesByPaths(sql: Sql, paths: string[]): FileRecord[] {
+  return sql.all<FileRecord>(
+    'SELECT * FROM file WHERE path IN (SELECT value FROM json_each(?))',
+    JSON.stringify(paths),
+  );
+}
+
 /** Rows on an inode: more than one for hard links. Finds a file that moved. */
 export const filesByInode = (sql: Sql, dev: string, ino: string) =>
   sql.all<FileRecord>('SELECT * FROM file WHERE dev = ? AND ino = ?', dev, ino);
@@ -144,6 +152,7 @@ export function fileDetail(sql: Sql, id: number): Omit<FileDetail, 'taggable'> |
 /** Replaces the searchable text of a file. */
 export function setContent(sql: Sql, fileId: number, text: string): void {
   sql.transaction(() => {
+    if (getContent(sql, fileId) === text) return;
     sql.run('DELETE FROM content WHERE rowid = ?', fileId);
     sql.run('INSERT INTO content (rowid, text) VALUES (?, ?)', fileId, text);
   });

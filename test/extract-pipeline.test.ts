@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { chmod, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { UserError } from '../src/core/config.ts';
 import { extractFile, isFailed, workerPool } from '../src/extract/index.ts';
 import { config, extract, fixture, setupExtract, temp } from './extract-helpers.ts';
@@ -126,4 +126,50 @@ describe('hung tools', () => {
     },
     30_000,
   );
+});
+
+describe('reusing extraction work', () => {
+  it('shares an unchanged extraction, copies results, and invalidates content and budget changes', async () => {
+    const path = join(temp, 'cached.txt');
+    await writeFile(path, 'first version');
+    const run = vi.spyOn(workerPool(), 'run');
+    try {
+      const [one, two] = await Promise.all([
+        extractFile(path, config()),
+        extractFile(path, config()),
+      ]);
+      expect(run).toHaveBeenCalledTimes(1);
+      one.text = 'mutated';
+      one.metadata.name = 'other';
+      expect(two.text).toBe('first version');
+      expect((await extractFile(path, config())).metadata.name).toBe('cached.txt');
+      expect(run).toHaveBeenCalledTimes(1);
+      await writeFile(path, 'other version');
+      expect((await extractFile(path, config())).text).toBe('other version');
+      await extractFile(path, config({ text_chars: 5 }));
+      expect(run).toHaveBeenCalledTimes(3);
+    } finally {
+      run.mockRestore();
+    }
+  });
+  it('returns typed failures to every caller sharing a timeout', async () => {
+    const path = join(temp, 'shared-timeout.pdf');
+    await writeFile(path, await readFile(fixture('report.pdf')));
+    const states = await Promise.all([
+      extractFile(path, config({ timeout_seconds: 0.001 })),
+      extractFile(path, config({ timeout_seconds: 0.001 })),
+    ]);
+    expect(states.map((state) => state.warnings)).toEqual([['timed out'], ['timed out']]);
+  });
+  it('lets a source-run CLI exit while a retained worker is idle', async () => {
+    const script = `import {configSchema} from './src/core/config.ts';
+      import {extractFile} from './src/extract/index.ts';
+      process.stdout.write((await extractFile(process.argv[1],configSchema.parse({}))).text);`;
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      ['--input-type=module', '--eval', script, fixture('table.csv')],
+      { cwd: join(import.meta.dirname, '..'), timeout: 5000 },
+    );
+    expect(stdout).toContain('lantern oil');
+  });
 });

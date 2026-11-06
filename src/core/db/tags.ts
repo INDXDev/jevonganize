@@ -32,6 +32,7 @@ function updateWeight(sql: Sql, fileId: number): void {
 
 /** Adds tags to the mirror, setting `ai` on each. Keeps `tag_w` right. */
 export function addFileTags(sql: Sql, fileId: number, tags: Tag[], ai: boolean): void {
+  if (!tags.length) return;
   sql.transaction(() => {
     for (const tag of tags) {
       const { id } = sql.get<{ id: number }>(
@@ -53,6 +54,7 @@ export function addFileTags(sql: Sql, fileId: number, tags: Tag[], ai: boolean):
 
 /** Removes tags from the mirror. Keeps `tag_w` right. */
 export function removeFileTags(sql: Sql, fileId: number, tags: Tag[]): void {
+  if (!tags.length) return;
   sql.transaction(() => {
     for (const tag of tags) {
       sql.run(
@@ -134,24 +136,31 @@ export function setTagFacets(sql: Sql, facets: { id: string; weight: number }[])
     for (const { id, weight } of facets) {
       // `;` is the character right after `:`.
       sql.run(
-        `UPDATE tag SET facet = ?, weight = ? WHERE (name >= ? AND name < ?) OR name = ?`,
+        `UPDATE tag SET facet = ?, weight = ? WHERE ((name >= ? AND name < ?) OR name = ?)
+         AND (facet IS NOT ? OR weight <> ?)`,
         id,
         weight,
         `${id}:`,
         `${id};`,
         `flag:${id}`,
+        id,
+        weight,
       );
     }
   });
 }
 
-/** Recomputes `df`, `idf` and every `tag_w`. Runs after each scan. */
-export function refreshIdf(sql: Sql): void {
-  sql.transaction(() => {
+/** Rebuilds dirty similarity weights atomically; returns false when nothing changed. */
+export function refreshIdf(sql: Sql): boolean {
+  return sql.transaction(() => {
+    if (!sql.get<{ dirty: number }>('SELECT dirty FROM similarity_state WHERE id = 1')!.dirty)
+      return false;
     const { n } = sql.get<{ n: number }>('SELECT count(*) AS n FROM file')!;
     sql.run('UPDATE tag SET df = (SELECT count(*) FROM file_tag WHERE tag_id = tag.id)');
     sql.run('UPDATE tag SET idf = ln(1 + (? - df + 0.5) / (df + 0.5))', n);
     sql.run(`UPDATE file SET tag_w = coalesce((SELECT sum(t.idf * t.weight) FROM file_tag ft
            JOIN tag t ON t.id = ft.tag_id WHERE ft.file_id = file.id), 0)`);
+    sql.run('UPDATE similarity_state SET dirty = 0 WHERE id = 1');
+    return true;
   });
 }

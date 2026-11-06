@@ -1,6 +1,7 @@
 /** PDF: text and metadata page by page, and rendering of the pages that hold too little text. */
 import { readFile } from 'node:fs/promises';
 import type { Budget } from '../core/config.ts';
+import type { FileState } from '../types.ts';
 import { addImage } from './images.ts';
 import { type Extractor, iso, passwordProtected, put, setText } from './source.ts';
 
@@ -17,13 +18,27 @@ export async function openPdf(path: string) {
 
 type Pdf = Awaited<ReturnType<typeof openPdf>>;
 
-/** Like `openPdf`, with undefined for a file that needs a password. */
-async function openUnlessLocked(path: string): Promise<Pdf | undefined> {
-  try {
-    return await openPdf(path);
-  } catch (error) {
-    if ((error as Error).name !== 'PasswordException') throw error;
-    return undefined;
+type Resource = { doc: Pdf; texts?: Promise<string[]> };
+const documents = new WeakMap<FileState, Map<string, Promise<Resource>>>();
+
+function resource(path: string, state: FileState): Promise<Resource> {
+  let owned = documents.get(state);
+  if (!owned) documents.set(state, (owned = new Map()));
+  let pending = owned.get(path);
+  if (!pending) {
+    pending = openPdf(path).then((doc) => ({ doc }));
+    owned.set(path, pending);
+  }
+  return pending;
+}
+
+/** Releases every PDF owned by one extraction task, including partially failed pipelines. */
+export async function closePdfs(state: FileState): Promise<void> {
+  const owned = documents.get(state);
+  documents.delete(state);
+  for (const pending of owned?.values() ?? []) {
+    const opened = await pending.catch(() => undefined);
+    if (opened) await opened.doc.loadingTask.destroy();
   }
 }
 
@@ -61,33 +76,41 @@ function pagesToRender(texts: string[], budget: Budget): number[] {
 /** Reads metadata and the text of the first `budget.pdf_pages` pages. */
 export const pdf: Extractor = async (file, state, budget) => {
   const { getMeta } = await import('unpdf');
-  const doc = await openUnlessLocked(file.path);
-  if (!doc) return passwordProtected(state);
+  let opened: Resource;
   try {
-    const { info } = await getMeta(doc, { parseDates: true });
-    put(state, 'pages', doc.numPages);
-    put(state, 'title', info.Title);
-    put(state, 'author', info.Author);
-    put(state, 'producer', info.Producer);
-    put(state, 'created', iso(info.CreationDate));
-    setText(state, (await pageTexts(doc, budget.pdf_pages)).join('\n\n'));
-  } finally {
-    await doc.loadingTask.destroy();
+    opened = await resource(file.path, state);
+  } catch (error) {
+    if ((error as Error).name !== 'PasswordException') throw error;
+    return passwordProtected(state);
   }
+  const { doc } = opened;
+  const { info } = await getMeta(doc, { parseDates: true });
+  put(state, 'pages', doc.numPages);
+  put(state, 'title', info.Title);
+  put(state, 'author', info.Author);
+  put(state, 'producer', info.Producer);
+  put(state, 'created', iso(info.CreationDate));
+  opened.texts ??= pageTexts(doc, budget.pdf_pages);
+  setText(state, (await opened.texts).join('\n\n'));
 };
 
 /** Adds page images for a PDF with thin text, such as a scan. Runs after `pdf`. */
 export const pdfRender: Extractor = async (file, state, budget) => {
-  if (state.metadata.pages === undefined) return; // `pdf` could not open it, and has said why
+  if (
+    state.metadata.pages === undefined ||
+    file.images === false ||
+    state.images.length >= budget.images ||
+    budget.render_pages === 0
+  )
+    return;
+  const opened = await resource(file.path, state);
+  opened.texts ??= pageTexts(opened.doc, budget.pdf_pages);
+  const pages = pagesToRender(await opened.texts, budget);
+  if (!pages.length) return;
   const { default: sharp } = await import('sharp');
-  const doc = await openPdf(file.path);
-  try {
-    const texts = await pageTexts(doc, budget.pdf_pages);
-    for (const number of pagesToRender(texts, budget)) {
-      const png = await renderPage(doc, number, budget.image_edge);
-      await addImage(state, budget, sharp(png), `page-${number}`);
-    }
-  } finally {
-    await doc.loadingTask.destroy();
+  for (const number of pages) {
+    if (state.images.length >= budget.images) break;
+    const png = await renderPage(opened.doc, number, budget.image_edge);
+    await addImage(state, budget, sharp(png), `page-${number}`);
   }
 };
