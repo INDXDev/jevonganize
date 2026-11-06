@@ -2,12 +2,21 @@
 import { t } from './i18n/index.ts';
 import { createInterface } from 'node:readline/promises';
 import type { Command } from 'commander';
-import { ask, type ChatTools, type PendingCall } from '../ai/chat.ts';
+import type { ChatTools, PendingCall } from '../ai/chat.ts';
 import { sanitizeLine } from '../core/sanitize.ts';
-import { callTool, type Context, tools, waitForJob } from '../core/tools.ts';
+import type { Context } from '../core/tools.ts';
 import type { Job, Plan } from '../types.ts';
 import { askEnvConsent } from './settings.ts';
-import { command, type JsonFlag, note, out, outJson, printPlan, withContext } from './shared.ts';
+import {
+  callTool,
+  command,
+  type JsonFlag,
+  note,
+  out,
+  outJson,
+  printPlan,
+  withContext,
+} from './shared.ts';
 
 const isJob = (value: unknown): value is Job =>
   typeof value === 'object' && value !== null && 'kind' in value && 'status' in value;
@@ -21,7 +30,8 @@ function describe(output: unknown): string {
 }
 
 /** The table, reporting each call. A job is waited for, so the model and the exit see its end. */
-function reporting(flags: JsonFlag): ChatTools<Context> {
+async function reporting(flags: JsonFlag): Promise<ChatTools<Context>> {
+  const { tools, waitForJob } = await import('../core/tools.ts');
   const wrap = ([name, entry]: [string, ChatTools<Context>[string]]) => {
     const run = async (input: unknown, ctx: Context) => {
       const started = await entry.run(input, ctx);
@@ -55,7 +65,8 @@ async function runAsk(request: string, flags: JsonFlag) {
       await askEnvConsent(ctx.config.chat.name);
       const terminal = process.stdin.isTTY && process.stderr.isTTY;
       const approve = terminal ? (call: PendingCall) => approveAtPrompt(ctx, call) : undefined;
-      const { text, needs_approval } = await ask(request, ctx, reporting(flags), approve);
+      const { ask } = await import('../ai/chat.ts');
+      const { text, needs_approval } = await ask(request, ctx, await reporting(flags), approve);
       if (flags.json) outJson({ type: 'text', text });
       else if (text) out(text);
       for (const { tool, input } of needs_approval) {

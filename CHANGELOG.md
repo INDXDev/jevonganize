@@ -11,6 +11,11 @@ First version, not released yet.
   previews over queued background extraction.
 - Speed up scan tag reads, search pages, exact similarity and tag cleanup. Unchanged scans no longer
   rebuild all similarity weights. Installation and build commands need no new dependencies.
+- A repeat organize no longer reads a file when nothing about it changed and every answer is cached.
+- Unchanged scans, CLI startup, thumbnails of PDFs, and the first window of the desktop app are
+  faster. `--json` job output now reports progress about four times a second, not once per file.
+- An `.eml` is read only as far as its first 2 MiB, so a body after large attachments is not seen.
+- The desktop app is about 114 MB smaller.
 
 - Follow the PC's language by default, with English, Japanese and Simplified Chinese interfaces.
   Override it in Settings or with `config set language en|ja|zh-CN|system`; CLI help and the shared

@@ -75,7 +75,7 @@ export function refreshTags(db: Db, facets: Facet[]): void {
 
 /** Tells front ends how many reviews are open. */
 export const emitReviews = (ctx: Context) =>
-  ctx.emit({ type: 'reviews', count: ctx.db.stats().reviews });
+  ctx.emit({ type: 'reviews', count: ctx.db.openReviewCount() });
 
 /** Whether tags can be stored at a path. A failed check counts as no. */
 export async function taggable(path: string): Promise<boolean> {

@@ -8,10 +8,14 @@ import { clearSelection, useActions, useWindow } from '../tabs.ts';
 import { gridLayout, lineHeight } from '../view-options.ts';
 
 const PAGE = 500;
+/** How long a page must stay on screen to be worth fetching: a fast scroll passes through many. */
+const SETTLE_MS = 120;
 
 const search = (query: FileQuery, page: number) => ({
   queryKey: ['search_files', { ...query, limit: PAGE, offset: page * PAGE }],
-  queryFn: () => call('search_files', { ...query, limit: PAGE, offset: page * PAGE }),
+  // Taking the signal is what lets a page that left the screen cancel its request.
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    call('search_files', { ...query, limit: PAGE, offset: page * PAGE }, signal),
 });
 
 const toggle = (id: number) =>
@@ -63,7 +67,17 @@ export function useRowLookup(
   ]
     .map((i) => Math.floor(i / PAGE))
     .filter((p, i, all) => p > 0 && all.indexOf(p) === i);
-  const rest = useQueries({ queries: pages.map((p) => search(query, p)) });
+  const onScreen = pages.join();
+  const [settled, setSettled] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(onScreen), SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [onScreen]);
+  // A disabled query still gives what is cached, so only pages never seen wait.
+  const wanted = new Set(settled.split(','));
+  const rest = useQueries({
+    queries: pages.map((p) => ({ ...search(query, p), enabled: wanted.has(String(p)) })),
+  });
   const loaded = new Map([[0, first], ...pages.map((p, i) => [p, rest[i]?.data] as const)]);
   return (i) => loaded.get(Math.floor(i / PAGE))?.files[i % PAGE];
 }

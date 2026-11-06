@@ -27,6 +27,8 @@ const CSP =
 const SAFE_TYPE =
   /^(image\/(png|jpeg|gif|webp|avif|bmp|heic|heif|tiff)|application\/pdf|text\/plain)$/;
 const THUMB_MAX_AGE = 31_536_000;
+/** Vite puts a hash of the content in these names, so a name never changes meaning. */
+const ASSET_CACHE = `private, max-age=${THUMB_MAX_AGE}, immutable`;
 
 /**
  * The built UI, the one place that knows where it lands: `dist/web` from source, and beside a
@@ -122,6 +124,13 @@ function addFileRoutes(app: Hono, ctx: Context): void {
 function addUiRoutes(app: Hono): void {
   const root = webRoot();
   if (root) {
+    app.use('/assets/*', async (c, next) => {
+      await next();
+      // A name that does not exist falls through to index.html, which must stay fresh.
+      if (!c.res.headers.get('content-type')?.startsWith('text/html')) {
+        c.res.headers.set('cache-control', ASSET_CACHE);
+      }
+    });
     app.use('*', serveStatic({ root }));
     app.get('*', serveStatic({ root, path: 'index.html' })); // the UI routes on the client
   } else {

@@ -37,6 +37,10 @@ export function listLibraries(sql: Sql): Omit<Library, 'taggable'>[] {
     }));
 }
 
+/** Every library's path, without the count of its files that `listLibraries` pays for. */
+export const libraryPaths = (sql: Sql) =>
+  sql.all<{ path: string }>('SELECT path FROM library ORDER BY path').map(({ path }) => path);
+
 /** Stamps a library as scanned now. Does nothing for a folder that is not a library. */
 export function markScanned(sql: Sql, path: string): void {
   sql.run('UPDATE library SET scanned_at = ? WHERE path = ?', Date.now(), path);

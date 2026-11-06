@@ -6,6 +6,7 @@ import type { ViewOptions } from '../core/config.ts';
 import type { FileRow, Job, ServerEvent, Status, ToolMap, ToolName } from '../types.ts';
 import { notify } from './tabs.ts';
 import type { TagColors } from './tag-colors.ts';
+import { JOB_READS, refreshedBy } from './refresh.ts';
 import { pathSep } from './view-query.ts';
 
 // The condition folds to false in a production build, which drops the mock from the bundle.
@@ -19,12 +20,14 @@ export const queryClient = new QueryClient({
 export async function call<K extends ToolName>(
   tool: K,
   input: ToolMap[K][0],
+  signal?: AbortSignal,
 ): Promise<ToolMap[K][1]> {
   if (mock) return mock.call(tool, input);
   const res = await fetch(`/api/call/${tool}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
+    signal,
   });
   const body = (await res.json().catch(() => null)) as
     | { ok: true; data: ToolMap[K][1] }
@@ -93,7 +96,9 @@ export async function act<K extends ToolName>(
 ): Promise<ToolMap[K][1] | undefined> {
   try {
     const data = await call(tool, input);
-    void queryClient.invalidateQueries();
+    const reads = refreshedBy(tool);
+    if (reads) invalidate(...reads);
+    else void queryClient.invalidateQueries();
     return data;
   } catch (error) {
     notify((error as Error).message, true);
@@ -166,15 +171,7 @@ function onEvent(event: ServerEvent) {
         status && { ...status, jobs: [job, ...status.jobs.filter((j) => j.id !== job.id)] },
     );
     if (job.status === 'running') return;
-    invalidate(
-      'status',
-      'list_plans',
-      'list_libraries',
-      'list_folders',
-      'search_files',
-      'list_tags',
-      'list_reviews',
-    );
+    invalidate(...JOB_READS);
     applyIfAsked(job);
     if (job.status === 'done') notify(ended[job.kind](job));
     if (job.status === 'failed')

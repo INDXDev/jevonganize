@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -225,6 +225,16 @@ describe('the UI', () => {
     const { headers } = await send('/some/client/route');
     expect(headers.get('content-security-policy')).toContain("default-src 'self'");
     expect(headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+  });
+
+  test.runIf(webRoot())('lets a hashed asset be cached for good, and nothing else', async () => {
+    const [name] = (await readdir(join(webRoot()!, 'assets'))).filter((n) => n.endsWith('.js'));
+    const asset = await send(`/assets/${name}`);
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get('cache-control')).toContain('immutable');
+    expect((await send('/')).headers.get('cache-control')).toBeNull();
+    // The UI answers for a name that does not exist, and that answer must not stick.
+    expect((await send('/assets/gone.js')).headers.get('cache-control')).toBeNull();
   });
 
   test('webRoot looks in dist/web from source', () => {

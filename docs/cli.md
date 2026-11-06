@@ -18,7 +18,7 @@ files.
 
 - stdout carries results only. Warnings, progress and prompts go to stderr.
 - `--json` prints the tool's output unchanged. Commands that run a job print NDJSON: one `Job` per
-  line, and the last line is the final state.
+  line, about four a second while it runs, and the last line is the final state.
 - Text output is [sanitised](security.md#terminal-output). `--json` keeps the original text, so treat
   it as untrusted.
 - Colour follows `NO_COLOR` and `FORCE_COLOR`. `DEBUG` with any value prints the stack of an

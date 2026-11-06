@@ -121,6 +121,7 @@ jevonganize/
 │   │   ├── media.ts      Audio and video tags, ffmpeg frames
 │   │   ├── tools.ts      Optional programs: ffmpeg, soffice
 │   │   ├── worker.ts     Worker entry
+│   │   ├── thumb-render.ts Draws a thumbnail, in a worker
 │   │   └── thumbs.ts     Thumbnail cache
 │   ├── ai/               The only folder that imports `ai` or `@ai-sdk/*`
 │   │   ├── providers.ts  Provider table
@@ -201,12 +202,14 @@ Directories come from `env-paths`, so they follow each OS's convention.
 
 - The server process owns the database. `jevonganize mcp` and CLI commands open the same file; WAL
   and a busy timeout let them share it.
-- Extraction runs in a `piscina` worker pool with up to four workers retained for 10 idle seconds.
+- Extraction runs in a `piscina` worker pool with up to four workers retained for 10 idle seconds,
+  or 60 in a server.
   Thumbnail work takes priority over queued extraction, with bounded fairness. Successful results
   have a bounded 30-second memory cache, invalidated by file identity/times and extraction settings.
   PDF steps share one task-local document and page text; no document handles survive a task.
   Tag reads for batches of 32 or more changed scan files run in a separate worker. Small batches
-  yield between reads without paying for worker startup.
+  yield between reads without paying for worker startup. A batch's reads start during the previous
+  batch's transaction, and what each path is, a move or a hard link, is decided after that commit.
   A parser that hangs is terminated on timeout, and a
   parser error fails one file rather than the job. A native crash ends the server, so a job can be
   run again; cached answers make that cheap.

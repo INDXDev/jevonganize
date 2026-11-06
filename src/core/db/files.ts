@@ -21,6 +21,8 @@ export interface FileRecord extends Fingerprint {
   id: number;
   hash: string | null;
   state_hash: string | null;
+  /** What `state_hash` was read from. See `extractKey` in organize.ts. */
+  extract_key: string | null;
   mime: string | null;
   metadata: string | null;
   status: FileRow['status'];
@@ -38,7 +40,7 @@ export function upsertFile(
   options: { edited: boolean; mime?: string | null },
 ): number {
   const reset = options.edited
-    ? `, status = 'new', hash = NULL, state_hash = NULL, error = NULL`
+    ? `, status = 'new', hash = NULL, state_hash = NULL, extract_key = NULL, error = NULL`
     : '';
   return sql.get<{ id: number }>(
     `INSERT INTO file (path, dev, ino, size, mtime_ns, ctime_ns, mime)
@@ -108,19 +110,22 @@ export function setFileResult(
     error?: string;
     hash?: string;
     state_hash?: string;
+    extract_key?: string;
     mime?: string;
     metadata?: FileDetail['metadata'];
   },
 ): void {
   sql.run(
     `UPDATE file SET status = ?, error = ?, hash = coalesce(?, hash),
-       state_hash = coalesce(?, state_hash), mime = coalesce(?, mime),
+       state_hash = coalesce(?, state_hash), extract_key = coalesce(?, extract_key),
+       mime = coalesce(?, mime),
        metadata = coalesce(?, metadata)
      WHERE id = ?`,
     result.status,
     result.error ?? null,
     result.hash ?? null,
     result.state_hash ?? null,
+    result.extract_key ?? null,
     result.mime ?? null,
     result.metadata ? JSON.stringify(result.metadata) : null,
     id,

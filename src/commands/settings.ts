@@ -2,9 +2,9 @@
 import { t, keySourceLabel } from './i18n/index.ts';
 import { spawnSync } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
+import { styleText } from 'node:util';
 import { confirm, isCancel, password } from '@clack/prompts';
 import type { Command } from 'commander';
-import pc from 'picocolors';
 import { parse, stringify } from 'smol-toml';
 import {
   configSchema,
@@ -20,9 +20,8 @@ import {
 } from '../core/config.ts';
 import { envKeyUnanswered, KEY_ENV, setEnvKeysAllowed } from '../core/credentials.ts';
 import { sanitizeLine } from '../core/sanitize.ts';
-import { callTool } from '../core/tools.ts';
 import type { FacetInfo, ProviderName } from '../types.ts';
-import { command, type JsonFlag, out, outJson, shown, withContext } from './shared.ts';
+import { callTool, command, type JsonFlag, out, outJson, shown, withContext } from './shared.ts';
 
 const prompt = { output: process.stderr };
 
@@ -173,9 +172,8 @@ async function runDoctor(flags: JsonFlag) {
     if (flags.json) return outJson(checks);
     for (const { name, ok, detail } of checks) {
       const label = t(name.startsWith('optional:') ? 'note' : ok ? 'ok' : 'FAIL').padEnd(6);
-      const colour = ok ? pc.green : pc.red;
       const text = name === 'volume' ? shown(detail) : sanitizeLine(detail);
-      out(`${colour(label)}${text}`);
+      out(`${styleText(ok ? 'green' : 'red', label)}${text}`);
     }
     return undefined;
   });

@@ -6,6 +6,9 @@ import type { JobRun } from '../plans.ts';
 import type { Context } from './shared.ts';
 
 const KEPT_JOBS = 20;
+/** At most this often for plain progress: a line of NDJSON or an SSE event per file is a lot. */
+const PROGRESS_MS = 250;
+const PROGRESS_FIELDS = new Set(['done', 'current', 'tokens', 'cost_usd']);
 
 interface RunningJob {
   job: Job;
@@ -44,9 +47,26 @@ export function startJob(
     total: 0,
     ...start,
   };
+  let lastEmit = 0;
+  let trailing: NodeJS.Timeout | undefined;
+  const send = () => {
+    clearTimeout(trailing);
+    trailing = undefined;
+    lastEmit = Date.now();
+    ctx.emit({ type: 'job', job: snapshot(job) });
+  };
   const update = (patch: Partial<Job>) => {
     Object.assign(job, patch);
-    ctx.emit({ type: 'job', job: snapshot(job) });
+    const progress =
+      job.status === 'running' && Object.keys(patch).every((key) => PROGRESS_FIELDS.has(key));
+    const wait = lastEmit + PROGRESS_MS - Date.now();
+    if (!progress || wait <= 0) {
+      send();
+      return;
+    }
+    // The last file before a long one must still show, so a skipped update comes out later.
+    trailing ??= setTimeout(send, wait);
+    trailing.unref();
   };
   const finished = Promise.resolve()
     .then(() => work({ signal: controller.signal, update }))

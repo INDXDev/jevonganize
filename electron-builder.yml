@@ -8,6 +8,11 @@ files:
   - dist/**
   - presets/**
   - package.json
+  # officeparser declares these for OCR and PDF, which are never reached: `ocr` is off, and PDFs go
+  # to unpdf. Checked against every format in test/fixtures/files. Together they are 114 MB.
+  - '!**/node_modules/tesseract.js*/**'
+  - '!**/node_modules/pdfjs-dist/**'
+  - '!**/node_modules/officeparser/dist/officeparser.browser*'
 # Native modules are Node-API prebuilds, so there is no rebuild step.
 npmRebuild: false
 asarUnpack:

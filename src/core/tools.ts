@@ -1,4 +1,5 @@
 /** The tool table: every operation, defined once. The CLI, HTTP, chat and MCP all call it. */
+import { keepWorkersWarm } from '../extract/index.ts';
 import type { ToolMap, ToolName } from '../types.ts';
 import { loadConfig, parseWith, UserError } from './config.ts';
 import { openDb } from './db.ts';
@@ -49,6 +50,7 @@ export async function openContext(
   caller: Context['caller'],
   emit: Context['emit'] = () => {},
 ): Promise<Context> {
+  if (caller === 'ui') keepWorkersWarm();
   const config = await loadConfig();
   return { db: openDb(), config, caller, emit };
 }

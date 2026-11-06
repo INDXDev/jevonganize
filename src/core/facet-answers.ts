@@ -130,7 +130,11 @@ function dateTagValue(text: string, format: NonNullable<Facet['format']>, fiscal
 }
 
 /** The tag of a `field` facet, copied from metadata and cleaned, or null. */
-export function derive(facet: Facet, state: FileState, config: Config): Tag | null {
+export function derive(
+  facet: Facet,
+  state: Pick<FileState, 'metadata'>,
+  config: Config,
+): Tag | null {
   if (facet.kind !== 'field' || facet.field === undefined) return null;
   const value = state.metadata[facet.field];
   if (value === undefined) return null;

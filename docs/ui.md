@@ -164,7 +164,10 @@ running job with a progress bar (from the `job` event) and the chat toggle. Clic
 activity screen. While a job runs, `status` is also polled every three seconds, so an end that was
 missed during a reconnect still shows. A job's end is announced in the status bar.
 
-On `files` events, React Query invalidates the affected queries. It does not refetch every page.
+On `files` events, React Query invalidates the affected queries. It does not refetch every page. A
+write from the UI refreshes only the reads listed for it in `web/refresh.ts`, and everything if it is
+not listed. A list page is fetched once it has stayed on screen for 120 ms, and leaving it cancels
+the request.
 
 ## Tabs
 

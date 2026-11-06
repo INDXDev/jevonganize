@@ -1,18 +1,25 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import bplist from 'bplist-creator';
 import koffi from 'koffi';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn<typeof execFileSync>() }));
+vi.mock('node:fs', () => ({ readFileSync: vi.fn<typeof readFileSync>() }));
 vi.mock('koffi', () => ({ default: { load: vi.fn<typeof koffi.load>() } }));
 
 const originalProcess = process;
 const platform = (value: string) =>
   vi.stubGlobal('process', Object.create(originalProcess, { platform: { value } }));
+const plist = (value: object) => bplist(value) as Buffer<ArrayBuffer>;
 const detect = async () => (await import('../src/core/system-language.ts')).systemLanguage();
 
 beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
+  vi.mocked(readFileSync).mockImplementation(() => {
+    throw new Error('no plist');
+  });
   for (const key of ['LC_ALL', 'LC_MESSAGES', 'LANGUAGE', 'LANG']) vi.stubEnv(key, '');
 });
 afterEach(() => {
@@ -21,6 +28,25 @@ afterEach(() => {
 });
 
 describe('PC language', () => {
+  test('macOS reads the preferred language from its plist, with no process', async () => {
+    platform('darwin');
+    vi.stubEnv('LANG', 'en_US.UTF-8');
+    vi.mocked(readFileSync).mockReturnValue(plist({ AppleLanguages: ['ja-JP', 'en-US'] }));
+    expect(await detect()).toBe('ja');
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['no list', { AppleLocale: 'ja_JP' }],
+    ['an empty list', { AppleLanguages: [] }],
+    ['a list of something else', { AppleLanguages: [1] }],
+  ])('macOS asks `defaults` when the plist has %s', async (_name, value) => {
+    platform('darwin');
+    vi.mocked(readFileSync).mockReturnValue(plist(value));
+    vi.mocked(execFileSync).mockReturnValue('(\n    "zh-Hans-CN"\n)\n');
+    expect(await detect()).toBe('zh-CN');
+  });
+
   test('macOS uses the preferred UI language even when the terminal locale is English', async () => {
     platform('darwin');
     vi.stubEnv('LANG', 'en_US.UTF-8');

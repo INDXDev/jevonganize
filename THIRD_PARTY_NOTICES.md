@@ -85,7 +85,6 @@ Their source is at the links below. In the desktop app they sit unpacked in the 
 | [opencollective-postinstall](https://github.com/opencollective/opencollective-postinstall#readme)    | 2.0.3   | MIT                       |
 | [p-limit](https://github.com/sindresorhus/p-limit#readme)                                            | 7.3.3   | MIT                       |
 | [pdfjs-dist](https://mozilla.github.io/pdf.js/)                                                      | 6.2.108 | Apache-2.0                |
-| [picocolors](https://github.com/alexeyraspopov/picocolors#readme)                                    | 1.1.1   | ISC                       |
 | [piscina](https://github.com/piscinajs/piscina#readme)                                               | 5.3.2   | MIT                       |
 | [postal-mime](https://postal-mime.postalsys.com)                                                     | 4.2.0   | MIT-0                     |
 | [powershell-utils](https://github.com/sindresorhus/powershell-utils#readme)                          | 0.2.1   | MIT                       |

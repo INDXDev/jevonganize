@@ -2,7 +2,7 @@
 import type { Config } from '../core/config.ts';
 import type { FileState } from '../types.ts';
 import { extractors, sniff } from './extractors.ts';
-import { renderThumbnail } from './thumbs.ts';
+import { renderThumbnail } from './thumb-render.ts';
 import { closePdfs } from './pdf.ts';
 
 /** Metadata comes from the file too, and has no budget of its own. */
@@ -25,6 +25,7 @@ export async function extract(input: {
   name: string;
   size: number;
   deadline: number;
+  screenCapture: boolean;
   config: Config;
 }): Promise<FileState & { mime: string }> {
   const { config, ...source } = input;

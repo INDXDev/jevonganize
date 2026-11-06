@@ -17,7 +17,7 @@ describe('terminal languages', () => {
       en: 'Update the index. Free and local',
       ja: 'インデックスを更新。無料・ローカル処理',
       'zh-CN': '更新索引，免费且在本地运行',
-    }[systemLanguage()];
+    }[await systemLanguage()];
     expect((await cli(['config', 'set', 'language', 'system'])).code).toBe(0);
     expect((await cli(['scan', '--help'])).stdout).toContain(expected);
     expect((await cli(['config', 'get', 'language'])).stdout).toBe('"system"\n');

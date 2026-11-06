@@ -26,8 +26,8 @@ PDF text and render steps reuse one document and its bounded page text. With `se
 image dimensions and other metadata are still read, but PDF/video rendering and image JPEG encoding
 are skipped. With no image slots or render pages, rendering is skipped too.
 
-The pool keeps at most four workers, retaining idle workers for 10 seconds without keeping the CLI
-alive. Thumbnail tasks can pass queued extraction tasks; background work still gets a turn after
+The pool keeps at most four workers, retaining idle workers for 10 seconds, or 60 in a server, without
+keeping the CLI alive. Thumbnail tasks can pass queued extraction tasks; background work still gets a turn after
 three thumbnail tasks. Each timeout starts on dispatch, rather than while queued. Successful results
 are copied into a 30-second, 32 MiB / 64-entry memory cache, keyed by file identity, size, nanosecond
 mtime/ctime and extraction settings. Changed files, new settings and warnings prevent stale reuse.
@@ -205,7 +205,7 @@ tuned with real cost data.
 | RAW | Expected to fail in `sharp`. Not tested |
 | Audio | Tags, duration and codec. No content is sent, so facets judge from metadata alone |
 | Video | As audio, plus up to `images` frames from `ffmpeg`. Video containers were not tested in `music-metadata` |
-| `.eml` | Subject, then body as plain text. Attachments are named, never opened |
+| `.eml` | Subject, then body as plain text. Attachments are named, never opened. Only the first 2 MiB is read, so what comes after a large attachment is not seen |
 | `.msg` | As `.eml`. No real file has been parsed yet, so this is unverified |
 | Zip | Reads the central directory only, through `fs.openAsBlob`. Nothing is decompressed, so a zip bomb costs nothing. Entry names become `text`, one per line |
 | Other archives | Name and size only |
@@ -340,3 +340,18 @@ use = ["libreoffice", "office"]
 - Order inside `use` is run order, and an earlier extractor wins, since later ones only fill gaps.
 - A change that alters the resulting state changes `state_hash`, so those files are asked again on
   their next organize. A change with the same result costs nothing.
+
+## Skipping a file on a repeat organize
+
+Organize does not read a file again when all of these hold. Anything else takes the full route.
+
+- Its last run ended `organized`, and its searchable text is still stored.
+- `file.extract_key` matches. That key hashes the path, device, inode, size and mtime, `[[pipeline]]`,
+  `[budget]`, `send_images`, `PATH` and the app version. `ctime` is left out, as writing tags moves it,
+  so an edit that restores size and mtime is not noticed. A scan has the same limit.
+- Every facet that applies has a cached answer under the stored `state_hash`, which passes the schema
+  check on read. The answer key does not change. With profiles whose models see different states, a
+  model without an answer under that hash means a full read.
+
+Metadata, MIME type and hash then come from the index. A warning about images a model cannot take is
+not repeated. A tool newly installed in a folder already on `PATH` is not noticed until the file changes.

@@ -5,10 +5,11 @@ import { cancel, multiselect, text } from '@clack/prompts';
 import type { Command } from 'commander';
 import { indexedPath, UserError } from '../core/config.ts';
 import { keySource } from '../core/credentials.ts';
-import { callTool, type Context } from '../core/tools.ts';
+import type { Context } from '../core/tools.ts';
 import type { ProviderName } from '../types.ts';
 import { askEnvConsent, readKey } from './settings.ts';
 import {
+  callTool,
   command,
   commaList,
   costLine,

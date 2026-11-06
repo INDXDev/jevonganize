@@ -1,7 +1,7 @@
 /** Audio and video: tags from the container, and frames through `ffmpeg` when it is installed. */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ifExists } from '../core/config.ts';
+import { ifExists } from '../core/paths.ts';
 import { addImage } from './images.ts';
 import { type Extractor, iso, put } from './source.ts';
 import { findTool, runTool, withTempDir } from './tools.ts';

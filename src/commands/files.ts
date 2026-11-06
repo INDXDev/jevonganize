@@ -5,11 +5,12 @@ import { sep } from 'node:path';
 import type { Command } from 'commander';
 import { ifExists, indexedPath, UserError } from '../core/config.ts';
 import { sanitizeLine } from '../core/sanitize.ts';
-import { callTool, type Context } from '../core/tools.ts';
+import type { Context } from '../core/tools.ts';
 import type { FileQuery, Plan, ReviewItem } from '../types.ts';
 import { askEnvConsent } from './settings.ts';
 import {
   applyAndReport,
+  callTool,
   command,
   commaList,
   costLine,

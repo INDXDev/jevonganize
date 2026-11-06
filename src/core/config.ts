@@ -2,10 +2,12 @@
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { chmod, mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
-import envPaths from 'env-paths';
+import { dirname, resolve } from 'node:path';
 import { parse, stringify, TomlError } from 'smol-toml';
 import { z } from 'zod';
+import { ifExists, paths } from './paths.ts';
+
+export { ifExists, paths };
 
 /** An error the user can fix. Anything else is reported as a bug. */
 export class UserError extends Error {}
@@ -14,29 +16,12 @@ export class UserError extends Error {}
 export const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-const defaultDirs = envPaths('jevonganize', { suffix: '' });
-
-/** Where everything lives. Tests point these elsewhere with `JEVONGANIZE_HOME`. */
-export const paths = {
-  configDir: () => homeOverride('config') ?? defaultDirs.config,
-  configFile: () => join(paths.configDir(), 'config.toml'),
-  credentialsFile: () => join(paths.configDir(), 'credentials.toml'),
-  facetsDir: () => join(paths.configDir(), 'facets'),
-  database: () => join(homeOverride('data') ?? defaultDirs.data, 'index.db'),
-  thumbnails: () => join(homeOverride('cache') ?? defaultDirs.cache, 'thumbnails'),
-};
-
 /** The files `config path` prints and Settings shows. */
 export const locations = () => ({
   config: paths.configFile(),
   data: paths.database(),
   cache: paths.thumbnails(),
 });
-
-function homeOverride(kind: string): string | undefined {
-  const root = process.env.JEVONGANIZE_HOME;
-  return root ? join(root, kind) : undefined;
-}
 
 /**
  * A path as the index holds it, for comparing with stored paths: its real path. `native`, because
@@ -261,16 +246,6 @@ export type ViewOptions = Config['view'];
 /** True for a TOML table or any other plain object, but not for an array. */
 export function isTable(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/** Awaits a file operation, turning "no such file" into `undefined`. */
-export async function ifExists<T>(operation: Promise<T>): Promise<T | undefined> {
-  try {
-    return await operation;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
-  }
 }
 
 /** Creates a file and flushes it to disk. The `wx` flag refuses anything already there. */

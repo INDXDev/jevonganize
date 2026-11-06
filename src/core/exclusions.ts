@@ -7,7 +7,7 @@ import { type Config, paths } from './config.ts';
  * Never read, indexed, tagged or sent, whatever `exclude` says: see docs/security.md. Patterns with
  * an inner `/` need the `**` prefix, or `ignore` anchors them to the root of the path.
  */
-const SECRETS = [
+export const SECRETS = [
   '.env',
   '.env.*',
   '*.pem',
@@ -46,7 +46,24 @@ const matcherPath = (path: string, directory: boolean) =>
 /** Builds the exclusion test for a library. Secrets match the whole path, so a root can't hide them. */
 export function exclusions(config: Config, root: string): Excluded {
   const secrets = ignore().add(SECRETS);
-  const user = ignore().add(config.exclude);
+  // A rule ending in `/` never matches a file, and the others look only at its name. That leaves
+  // the folders above a file, which are few and judged once: this runs for every file of a scan.
+  const fileSecrets = ignore().add(SECRETS.filter((rule) => !rule.endsWith('/')));
+  const user = config.exclude.length > 0 ? ignore().add(config.exclude) : undefined;
+  const folders = new Map<string, boolean>();
+  const isSecretFolder = (folder: string) => {
+    let secret = folders.get(folder);
+    if (secret === undefined) folders.set(folder, (secret = secrets.ignores(folder)));
+    return secret;
+  };
+  const isSecret = (wholePath: string) => {
+    const name = wholePath.lastIndexOf('/') + 1;
+    if (name === wholePath.length) return isSecretFolder(wholePath);
+    return (
+      (name > 0 && isSecretFolder(wholePath.slice(0, name))) ||
+      fileSecrets.ignores(wholePath.slice(name))
+    );
+  };
   // With a home folder as a library, these would index the keys, and the index would chase itself.
   const appDirs = [paths.configDir(), dirname(paths.database()), dirname(paths.thumbnails())];
   const isAppPath = (path: string) =>
@@ -56,10 +73,29 @@ export function exclusions(config: Config, root: string): Excluded {
     const wholePath = matcherPath(path.slice(parse(path).root.length), directory);
     // A path the matcher cannot judge is not one to read.
     if (!ignore.isPathValid(wholePath)) return true;
-    if (secrets.ignores(wholePath)) return true;
+    if (isSecret(wholePath)) return true;
+    if (!user) return false;
     const inRoot = relative(root, path);
     return inRoot !== '' && user.ignores(matcherPath(inRoot, directory));
   };
+}
+
+const shared = new Map<string, Excluded>();
+const MAX_SHARED = 64;
+
+/**
+ * `exclusions`, built once for the same rules. For what asks about one path at a time, like a
+ * thumbnail, where building the matchers costs more than the question. Keyed by value, because a
+ * config object is changed in place.
+ */
+export function sharedExclusions(config: Config, root: string): Excluded {
+  const key = JSON.stringify([root, config.exclude, paths.configDir(), paths.database()]);
+  let excluded = shared.get(key);
+  if (!excluded) {
+    if (shared.size >= MAX_SHARED) shared.clear();
+    shared.set(key, (excluded = exclusions(config, root)));
+  }
+  return excluded;
 }
 
 /** True when a library's real path is itself a secret, whatever link led there. */

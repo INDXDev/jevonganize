@@ -1,5 +1,15 @@
 import { execFileSync } from 'node:child_process';
-import { chmod, mkdir, rename, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { scanLibrary } from '../src/core/scan.ts';
@@ -104,6 +114,34 @@ describe('fingerprints of edits, renames and deletions', () => {
     execFileSync('ln', [path, at('b.txt')]);
     await scan();
     expect(indexed()).toEqual(['a.txt', 'b.txt']);
+  });
+
+  it('tells moves from hard links across batches, whose reads overlap', async () => {
+    const path = await put('old/a.txt');
+    const id = db.fileByPath((await scan(), path))!.id;
+    await Promise.all(['p', 'q', 'r'].map((name) => mkdir(at(name))));
+    // A walk takes folders as `readdir` gives them, so this puts the bulk between the two links.
+    const folders = (await readdir(at())).filter((name) => name.length === 1);
+    const [first = '', middle = '', last = ''] = folders;
+    await Promise.all(Array.from({ length: 600 }, (_, n) => put(`${middle}/${n}.txt`)));
+    await rename(path, at(first, 'one.txt'));
+    execFileSync('ln', [at(first, 'one.txt'), at(last, 'two.txt')]);
+    const result = await scan();
+    expect(result).toMatchObject({ files: 602, moved: 1, added: 601, removed: 0 });
+    expect(indexed()).toEqual(expect.arrayContaining([`${first}/one.txt`, `${last}/two.txt`]));
+    expect(await scan()).toMatchObject({ added: 0, moved: 0, changed: 0, removed: 0 });
+    expect(db.fileById(id)).toBeDefined();
+  });
+
+  it('records the tags of every batch', async () => {
+    const paths = await Promise.all(
+      Array.from({ length: 600 }, (_, n) => put(`bulk/${n}.txt`, String(n))),
+    );
+    await Promise.all(paths.map((path, n) => writeTags(path, [`tag:${n}`])));
+    await scan();
+    for (const [n, path] of paths.entries()) {
+      expect(db.fileTags(db.fileByPath(path)!.id).map(({ tag }) => tag)).toEqual([`tag:${n}`]);
+    }
   });
 
   it('a deleted file loses its row, and answers stay', async () => {

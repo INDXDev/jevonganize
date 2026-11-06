@@ -90,3 +90,7 @@ export function dropRestored(sql: Sql, fileId: number, tags: Tag[]): void {
     sql.run(`DELETE FROM review WHERE file_id = ? AND kind = 'restore' AND tag = ?`, fileId, tag);
   }
 }
+
+/** How many reviews wait for a person. */
+export const openReviewCount = (sql: Sql) =>
+  sql.get<{ n: number }>(`SELECT count(*) AS n FROM review WHERE state = 'open'`)!.n;

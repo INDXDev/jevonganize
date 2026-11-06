@@ -1,10 +1,11 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { UserError } from '../src/core/config.ts';
 import { readTags } from '../src/core/tags.ts';
-import { callTool, tools, waitForJob } from '../src/core/tools.ts';
-import type { ToolName } from '../src/types.ts';
+import { callTool, type Context, tools, waitForJob } from '../src/core/tools.ts';
+import { startJob } from '../src/core/tools/jobs.ts';
+import type { Job, ToolName } from '../src/types.ts';
 import {
   addReview,
   as,
@@ -39,6 +40,31 @@ async function webSource() {
   );
   return (await Promise.all(names.map((name) => readFile(join(dir, name), 'utf8')))).join();
 }
+
+describe('job progress', () => {
+  test('sends few progress events, and every other change at once', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    const seen: Job[] = [];
+    const emit: Context['emit'] = (event) => {
+      if (event.type === 'job') seen.push(event.job);
+    };
+    const { promise: waiting, resolve: release } = Promise.withResolvers<void>();
+    const { id } = startJob('apply', { ...ctx, emit }, async (run) => {
+      for (let done = 1; done <= 1000; done++) run.update({ done, current: `file ${done}` });
+      run.update({ total: 1000 });
+      run.update({ done: 1001 });
+      vi.advanceTimersByTime(300);
+      await waiting;
+    });
+    await vi.waitUntil(() => seen.length >= 3);
+    expect(seen.map((job) => job.done)).toEqual([1, 1000, 1001]);
+    release();
+    const final = await waitForJob(id);
+    expect(final).toMatchObject({ status: 'done', done: 1001 });
+    expect(seen.at(-1)).toMatchObject({ status: 'done', current: undefined });
+    vi.useRealTimers();
+  });
+});
 
 describe('the approval gate on what only a person may drop', () => {
   test('a model cannot resolve review items, and a person can', async () => {

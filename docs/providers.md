@@ -66,6 +66,14 @@ Jevonganize always sends JPEG.
   Clef with images. Microsoft-Decision-1 takes no images on any route.
 - **PDFs and Office files:** no decision endpoint accepts them. See [pipeline](pipeline.md).
 - **Batching:** no decision API offers a batch discount. Jevonganize uses `concurrency` with backoff.
+- **Prompt caching:** `promptCacheKey` is not set, because it changed nothing. Measured on `gpt-6-luna`
+  on 2026-11-07 with 3,000-token synthetic files: only a byte-identical request read the cache, with or
+  without a key. The per-call marker makes every real request differ, even for one file, so each call
+  writes about 89% of its input to the cache and reads none. `estimateCost` counts those tokens at the
+  normal price, so a bill can run up to a quarter above it.
+- **Concurrency:** on one OpenAI key, 64 synthetic files took 18.8 s at `concurrency = 2`, 5.1 s at 8,
+  3.3 s at 16 and 2.2 s at 32 or 64. 400 files at 32 took 9.4 s with no failures. Limits depend on the
+  account, so the default stays 8.
 
 ## Prices
 

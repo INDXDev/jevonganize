@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { writeFile } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Command } from 'commander';
 import { describe, expect, test } from 'vitest';
@@ -23,6 +23,14 @@ describe('the floor', () => {
     ['22.20.0', false],
   ])('%s: %s', (version, ok) => {
     expect(nodeSupported(version)).toBe(ok);
+  });
+});
+
+describe('startup', () => {
+  test('keeps its compile cache in a private folder of the app', async () => {
+    expect((await cli(['--version'])).code).toBe(0);
+    const { mode } = await stat(join(home(), 'cache', 'compile'));
+    expect(mode & 0o777).toBe(process.platform === 'win32' ? mode & 0o777 : 0o700);
   });
 });
 

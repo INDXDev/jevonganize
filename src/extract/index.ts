@@ -1,17 +1,20 @@
 /** Runs the pipeline for a file in a worker pool. A hang or a parser error costs that one file. */
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import type { BigIntStats } from 'node:fs';
-import { lstat } from 'node:fs/promises';
-import { availableParallelism } from 'node:os';
-import { basename, resolve } from 'node:path';
+import { lstat, rm } from 'node:fs/promises';
+import { availableParallelism, tmpdir } from 'node:os';
+import { basename, join, resolve } from 'node:path';
 import mime from 'mime';
 import { Piscina } from 'piscina';
 import type { Config } from '../core/config.ts';
 import { UserError } from '../core/config.ts';
+import { isScreenCapture } from '../core/tags.ts';
 import type { FileState } from '../types.ts';
 import { extractors } from './extractors.ts';
 import { cacheExtraction, cachedExtraction } from './cache.ts';
 import { createScheduler } from './scheduler.ts';
+
+import { findTool } from './tools.ts';
 
 export { optionalTools } from './tools.ts';
 
@@ -29,15 +32,38 @@ const threads = Math.min(availableParallelism(), 4);
 /** Tasks wait here, not in the pool, so that time in a queue never counts against a timeout. */
 const schedule = createScheduler(threads);
 let pool: Piscina | undefined;
+let idleTimeout = 10_000;
+
+/** For a process that stays up: a wave of thumbnails then finds its workers already loaded. */
+export function keepWorkersWarm(): void {
+  idleTimeout = 60_000;
+}
+
+/**
+ * Where each worker keeps its `soffice` profile, private to this process. A worker is terminated
+ * with no chance to clean up, so what outlives it is removed from here.
+ */
+function startProfiles(created: Piscina, root: string): void {
+  created.on('workerDestroy', ({ id }: { id: number }) => {
+    void rm(join(root, String(id)), { recursive: true, force: true });
+  });
+  process.once('exit', () => rmSync(root, { recursive: true, force: true }));
+}
 
 /** The shared pool, started on first use. Idle workers do not keep the process alive. */
-export const workerPool = () =>
-  (pool ??= new Piscina({
+export function workerPool(): Piscina {
+  if (pool) return pool;
+  const profileRoot = findTool('soffice') && mkdtempSync(join(tmpdir(), 'jevonganize-soffice-'));
+  pool = new Piscina({
     filename: workerFile(),
     minThreads: 0,
     maxThreads: threads,
-    idleTimeout: 10_000,
-  }));
+    idleTimeout,
+    workerData: { profileRoot },
+  });
+  if (profileRoot) startProfiles(pool, profileRoot);
+  return pool;
+}
 
 /** Runs one export of worker.ts, terminating its worker after `timeoutMs`. */
 export const runTask = <T>(name: string, input: unknown, timeoutMs: number): Promise<T> =>
@@ -97,9 +123,10 @@ export async function extractFile(
   const pending = inFlight.get(key);
   if (pending) return structuredClone(await pending);
   const work = async () => {
+    const screenCapture = isScreenCapture(file);
     const state = await runTask<FileState & { mime: string }>(
       'extract',
-      () => ({ ...input, deadline: Date.now() + timeoutMs }),
+      () => ({ ...input, screenCapture, deadline: Date.now() + timeoutMs }),
       timeoutMs,
     );
     const after = await lstat(file, { bigint: true }).catch(() => undefined);

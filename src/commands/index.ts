@@ -108,8 +108,14 @@ function report(error: unknown, program: Command, argv: string[]): void {
 
 /** Runs the CLI. Sets `process.exitCode`, and exits once stdout has drained. */
 export async function run(argv: string[]): Promise<void> {
-  const config = await loadConfig().catch(() => undefined);
-  const locale = !config ? 'en' : config.language === 'system' ? systemLanguage() : config.language;
+  // Nothing in a version line is translated, so it need not read the config.
+  const version = argv.length === 1 && (argv[0] === '-V' || argv[0] === '--version');
+  const config = version ? undefined : await loadConfig().catch(() => undefined);
+  const locale = !config
+    ? 'en'
+    : config.language === 'system'
+      ? await systemLanguage()
+      : config.language;
   await withLanguage(locale, () => runProgram(argv));
 }
 

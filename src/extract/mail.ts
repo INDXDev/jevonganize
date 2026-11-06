@@ -1,7 +1,11 @@
 /** Mail: `.eml` and `.msg` reduce to one shape. Attachments are named and never opened. */
 import { readFile } from 'node:fs/promises';
 import type { FileState } from '../types.ts';
-import { type Extractor, iso, put, setText } from './source.ts';
+import { type Extractor, iso, put, readRange, setText } from './source.ts';
+
+/** The body comes first in nearly all mail, and parsing a big attachment costs ten times its size. */
+// shortcut: a body placed after this many bytes of attachments is lost, raise it if real mail needs it
+const EML_BYTES = 2 * 2 ** 20;
 
 interface Mail {
   subject?: string;
@@ -31,7 +35,7 @@ const htmlToText = (html: string) =>
 /** Reads an RFC 822 message. */
 export const eml: Extractor = async (file, state) => {
   const { default: PostalMime } = await import('postal-mime');
-  const mail = await PostalMime.parse(await readFile(file.path));
+  const mail = await PostalMime.parse(await readRange(file.path, EML_BYTES));
   fillMail(state, {
     subject: mail.subject,
     from: person(mail.from?.name, mail.from?.address),

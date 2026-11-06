@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { once } from 'node:events';
-import { chmod, readFile, symlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { chmod, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
+import { basename, delimiter, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import { UserError } from '../src/core/config.ts';
@@ -92,6 +93,84 @@ describe('worker failures', () => {
     const states = await Promise.all(paths);
     expect(states.every((state) => state.images.length === 1)).toBe(true);
   }, 60_000);
+});
+
+/** Every module a file reaches through value imports: `import type` costs a worker nothing. */
+async function reached(file: string, seen = new Set<string>()): Promise<Set<string>> {
+  const source = await readFile(file, 'utf8');
+  const imports = source.matchAll(/^(?:import|export) (?!type )[^'"]*?from '([^']+)'/gm);
+  for (const [, name = ''] of imports) {
+    const target = name.startsWith('.') ? join(dirname(file), name) : name;
+    if (seen.has(target)) continue;
+    seen.add(target);
+    if (name.startsWith('.')) await reached(target, seen);
+  }
+  return seen;
+}
+
+describe('what a worker loads', () => {
+  it('stays clear of zod and native tag code, which each worker would pay to start', async () => {
+    const loaded = await reached(join(import.meta.dirname, '../src/extract/worker.ts'));
+    expect(loaded.has('./worker.ts')).toBe(false);
+    expect([...loaded].filter((name) => ['zod', 'koffi', 'piscina'].includes(name))).toEqual([]);
+  });
+
+  it.runIf(process.platform === 'darwin')(
+    'still reports a macOS screen capture, read before the task',
+    async () => {
+      const path = join(temp, 'capture.png');
+      await writeFile(path, await readFile(fixture('tiny-transparent.png')));
+      await promisify(execFile)('xattr', [
+        '-wx',
+        'com.apple.metadata:kMDItemIsScreenCapture',
+        // A binary plist holding `true`.
+        '62 70 6C 69 73 74 30 30 09 08 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09',
+        path,
+      ]);
+      expect((await extractFile(path, config())).metadata.screenshot).toBe(true);
+    },
+  );
+});
+
+describe('soffice profiles', () => {
+  it('runs with macros off, in a profile that goes with the process', async () => {
+    const bin = await mkdtemp(join(temp, 'bin-'));
+    const log = join(bin, 'log');
+    await writeFile(
+      join(bin, 'soffice'),
+      `#!/bin/sh
+profile=\${1#-env:UserInstallation=file://}
+grep -c DisableMacrosExecution "$profile/user/registrymodifications.xcu" >> ${JSON.stringify(log)}
+echo "$profile" >> ${JSON.stringify(log)}
+shift
+for arg; do case "$prev" in --outdir) out=$arg ;; esac; prev=$arg; done
+cp ${JSON.stringify(fixture('report.pdf'))} "$out/converted.pdf"
+`,
+    );
+    await chmod(join(bin, 'soffice'), 0o755);
+    const path = join(temp, 'old.doc');
+    await writeFile(path, await readFile(fixture('plan.doc')));
+    const code = `
+      import { configSchema } from './src/core/config.ts';
+      import { extractFile, workerPool } from './src/extract/index.ts';
+      const config = configSchema.parse({ pipeline: [{ match: '*', use: ['libreoffice'] }] });
+      const first = await extractFile(process.argv[1], config);
+      console.log(first.text.length > 0);
+      process.exit(0);`;
+    const run = await promisify(execFile)(
+      process.execPath,
+      ['--input-type=module', '-e', code, path],
+      {
+        cwd: join(import.meta.dirname, '..'),
+        env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}` },
+      },
+    );
+    expect(run.stdout.trim()).toBe('true');
+    const [count, profile = ''] = (await readFile(log, 'utf8')).trim().split('\n');
+    expect(count).toBe('1');
+    expect(basename(dirname(profile))).toMatch(/^jevonganize-soffice-/);
+    expect(existsSync(dirname(profile))).toBe(false); // gone with the process
+  });
 });
 
 describe('hung tools', () => {

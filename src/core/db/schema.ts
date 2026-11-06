@@ -78,6 +78,7 @@ CREATE TRIGGER similarity_weight_update AFTER UPDATE OF weight ON tag
 WHEN old.weight <> new.weight AND (SELECT dirty FROM similarity_state WHERE id = 1) = 0
 BEGIN UPDATE similarity_state SET dirty = 1 WHERE id = 1; END;
 `,
+  `ALTER TABLE file ADD COLUMN extract_key TEXT;`,
 ];
 
 /** The schema version of this index. */

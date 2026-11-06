@@ -80,7 +80,7 @@ export const settingsTools = {
     agent: false,
     run: async (_input, { config }) => ({
       config,
-      system_language: systemLanguage(),
+      system_language: await systemLanguage(),
       schema: configJsonSchema(),
       paths: locations(),
     }),

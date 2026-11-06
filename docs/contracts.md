@@ -143,6 +143,8 @@ Successful extraction results may be reused in process for 30 seconds, up to 32 
 The key includes the absolute path, device/inode, size, nanosecond mtime/ctime, pipeline, budgets and
 image setting. A fresh regular-file check precedes every lookup, results are copied for each caller,
 and files that change during extraction or produce warnings are not cached. Nothing extra is persisted.
+Workers load neither `zod` nor `koffi`: defaults arrive with the task, and `extractFile` reads the
+macOS screen-capture attribute itself and passes it in. A server keeps idle workers for 60 seconds.
 Concurrent thumbnail requests for one output share one generation; different sizes remain independent.
 
 ## Decisions: `ai/`
@@ -183,7 +185,8 @@ CREATE TABLE file (
   path TEXT NOT NULL UNIQUE,
   dev TEXT, ino TEXT, size INTEGER, mtime_ns TEXT, ctime_ns TEXT,
   hash TEXT, state_hash TEXT, mime TEXT, metadata TEXT,
-  status TEXT NOT NULL DEFAULT 'new', tag_w REAL NOT NULL DEFAULT 0, error TEXT
+  status TEXT NOT NULL DEFAULT 'new', tag_w REAL NOT NULL DEFAULT 0, error TEXT,
+  extract_key TEXT                       -- names the extraction `state_hash` came from
 );
 CREATE INDEX file_hash ON file(hash);
 CREATE INDEX file_inode ON file(dev, ino);
@@ -267,6 +270,7 @@ browser's stored tabs and pane sizes, which belong to the origin. Every request 
 | `POST /api/chat` | AI SDK UI message stream |
 | `GET /thumb/:id?size=` | Cached webp, `Cache-Control: immutable` on a hash URL |
 | `GET /file/:id` | Original bytes, with range support and `nosniff`. `CSP: sandbox` for active content |
+| `GET /assets/*` | The UI's hashed files, `Cache-Control: immutable` |
 | `GET /*` | The built UI |
 
 Files are addressed by id, never by a path from the client. A `UserError` returns status 400 with

@@ -12,6 +12,8 @@ export interface SourceFile {
   deadline: number;
   /** False when pixels would be discarded; dimensions and metadata are still needed. */
   images?: boolean;
+  /** macOS marked it a screenshot. Read before the task, so that workers load no native code. */
+  screenCapture?: boolean;
 }
 
 /** One step of the pipeline. It fills `state`, and leaves what an earlier step wrote alone. */

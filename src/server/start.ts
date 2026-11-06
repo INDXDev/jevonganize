@@ -2,7 +2,6 @@
 import { randomBytes } from 'node:crypto';
 import type { Server } from 'node:http';
 import { createAdaptorServer } from '@hono/node-server';
-import open from 'open';
 import { UserError } from '../core/config.ts';
 import { openContext, watchLibraries } from '../core/tools.ts';
 import type { ServerEvent } from '../types.ts';
@@ -69,7 +68,10 @@ export async function startServer(options: { port?: number; browser?: boolean } 
 
   const stopWatching = ctx.config.watch.enabled ? watchLibraries(ctx) : async () => {};
   const url = `http://127.0.0.1:${port}/auth?t=${token}`;
-  if (options.browser) await open(url);
+  if (options.browser) {
+    const { default: open } = await import('open');
+    await open(url);
+  }
 
   const stop = async () => {
     await stopWatching();

@@ -4,8 +4,10 @@ import { app, BrowserWindow, Menu, nativeTheme, shell, utilityProcess } from 'el
 
 let win: BrowserWindow | undefined;
 
-function open({ port, token }: { port: number; token: string }): void {
-  const origin = `http://127.0.0.1:${port}`;
+/** Set once the server has a port. Until then a navigation has nowhere it may go. */
+let origin: string | undefined;
+
+function createWindow(): void {
   win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -25,16 +27,21 @@ function open({ port, token }: { port: number; token: string }): void {
   win.webContents.session.setPermissionRequestHandler((_contents, _permission, done) =>
     done(false),
   );
-  void win.loadURL(`${origin}/auth?t=${token}`);
+}
+
+function load({ port, token }: { port: number; token: string }): void {
+  origin = `http://127.0.0.1:${port}`;
+  void win?.loadURL(`${origin}/auth?t=${token}`);
 }
 
 function start(): void {
   // The default menu would take Cmd+W, which the app uses to close a tab.
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]));
   const server = utilityProcess.fork(join(import.meta.dirname, '../server/start.mjs'));
-  server.once('message', open);
+  server.once('message', load);
   server.once('exit', (code) => app.exit(code));
   app.on('before-quit', () => server.kill());
+  createWindow(); // while the server starts: it paints the background, and takes no input yet
 }
 
 if (app.requestSingleInstanceLock()) {

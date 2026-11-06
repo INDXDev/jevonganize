@@ -1,5 +1,7 @@
 /** PDF: text and metadata page by page, and rendering of the pages that hold too little text. */
 import { readFile } from 'node:fs/promises';
+import type { Canvas, SKRSContext2D } from '@napi-rs/canvas';
+import type { Sharp } from 'sharp';
 import type { Budget } from '../core/config.ts';
 import type { FileState } from '../types.ts';
 import { addImage } from './images.ts';
@@ -17,6 +19,11 @@ export async function openPdf(path: string) {
 }
 
 type Pdf = Awaited<ReturnType<typeof openPdf>>;
+
+/** The part of pdf.js's canvas factory a render goes through. */
+interface CanvasFactory {
+  create(...args: unknown[]): { canvas: Canvas; context: SKRSContext2D };
+}
 
 type Resource = { doc: Pdf; texts?: Promise<string[]> };
 const documents = new WeakMap<FileState, Map<string, Promise<Resource>>>();
@@ -42,14 +49,36 @@ export async function closePdfs(state: FileState): Promise<void> {
   }
 }
 
-/** Renders one page as a PNG, its longest side `edge` pixels whatever size the page claims. */
-export async function renderPage(doc: Pdf, number: number, edge: number): Promise<Uint8Array> {
+/**
+ * Renders one page, its longest side `edge` pixels whatever size the page claims. unpdf only hands
+ * back encoded images, so its canvas "encodes" to the raw pixels: a PNG costs more than the render.
+ */
+export async function renderPage(doc: Pdf, number: number, edge: number): Promise<Sharp> {
   const { renderPageAsImage } = await import('unpdf');
+  const { default: sharp } = await import('sharp');
   const { width, height } = (await doc.getPage(number)).getViewport({ scale: 1 });
-  return renderPageAsImage(doc, number, {
-    canvasImport: () => import('@napi-rs/canvas'),
-    scale: edge / Math.max(width, height),
-  });
+  const factory = doc.canvasFactory as CanvasFactory;
+  const create = factory.create.bind(factory);
+  const size = { width: 0, height: 0 };
+  factory.create = (...args) => {
+    const made = create(...args);
+    const { canvas, context } = made;
+    // pdf.js makes scratch canvases here too. Only the page's own is ever encoded.
+    canvas.encode = async () => {
+      Object.assign(size, { width: canvas.width, height: canvas.height });
+      return context.getImageData(0, 0, canvas.width, canvas.height).data as unknown as Buffer;
+    };
+    return made;
+  };
+  try {
+    const pixels = await renderPageAsImage(doc, number, {
+      canvasImport: () => import('@napi-rs/canvas'),
+      scale: edge / Math.max(width, height),
+    });
+    return sharp(pixels, { raw: { ...size, channels: 4 } });
+  } finally {
+    delete (factory as Partial<CanvasFactory>).create; // back to the method on its prototype
+  }
 }
 
 /** Reads pages one by one, because `extractText` would walk all of a hostile 100,000-page file. */
@@ -107,10 +136,13 @@ export const pdfRender: Extractor = async (file, state, budget) => {
   opened.texts ??= pageTexts(opened.doc, budget.pdf_pages);
   const pages = pagesToRender(await opened.texts, budget);
   if (!pages.length) return;
-  const { default: sharp } = await import('sharp');
   for (const number of pages) {
     if (state.images.length >= budget.images) break;
-    const png = await renderPage(opened.doc, number, budget.image_edge);
-    await addImage(state, budget, sharp(png), `page-${number}`);
+    await addImage(
+      state,
+      budget,
+      await renderPage(opened.doc, number, budget.image_edge),
+      `page-${number}`,
+    );
   }
 };

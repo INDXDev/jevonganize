@@ -57,6 +57,18 @@ export function fileStates(sql: Sql, query: FileQuery) {
   );
 }
 
+/** Which files a `FileQuery` matches, without the cost of every file's tags. */
+export function fileRefs(sql: Sql, query: FileQuery) {
+  const { matches, from, params, ranked } = compileQuery(query);
+  return sql.all<Pick<FileRow, 'id' | 'path'>>(
+    `${matches} SELECT f.id, f.path ${from}
+     ORDER BY ${orderBy(query, ranked)} LIMIT ? OFFSET ?`,
+    ...params,
+    query.limit ?? -1,
+    query.offset ?? 0,
+  );
+}
+
 /** Files most like this one, by IDF-weighted Jaccard. See docs/storage.md. */
 export function similarFiles(sql: Sql, id: number, limit = 20): SimilarFile[] {
   const hits = sql.all<{ file_id: number; score: number }>(

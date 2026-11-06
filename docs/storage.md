@@ -106,6 +106,7 @@ Answers hold labels and numbers, never file content.
 | `file`, `tag`, `file_tag` rows | Rebuilt by the next scan | No |
 | `content` | Rebuilt by the next organize, from cached answers and fresh extraction, with no model call | No |
 | Thumbnails | Rebuilt on demand | No |
+| `<cache dir>/compile` | Rebuilt by the next CLI run, which starts slower once | No |
 
 So do not delete `index.db` casually. It is safe for your tags, but it is not free.
 
@@ -290,6 +291,8 @@ Extraction results are kept only in a bounded process-memory cache for 30 second
 64 entries, with a fresh regular-file and fingerprint check on access. Pipeline, budget and image
 settings are part of the key. Content hashes have a bounded fingerprint-keyed memory cache as well;
 their `f1:`/`p1:` SHA-256 formats are unchanged. No new file-content cache is written to disk.
+`file.extract_key` lets a repeat organize skip a file: see
+[pipeline.md](pipeline.md#skipping-a-file-on-a-repeat-organize). It holds a hash, and no content.
 
 Concurrent requests for the same thumbnail share one generation. Search totals are cached until
 local SQLite changes or a different connection's data version changes. Page rows and tags are read

@@ -5,12 +5,19 @@ import { sep } from 'node:path';
 import type { Command } from 'commander';
 import { indexedPath, UserError } from '../core/config.ts';
 import { sanitize, sanitizeLine } from '../core/sanitize.ts';
-import { callTool, type Context, openContext, waitForJob } from '../core/tools.ts';
+import type * as ToolTable from '../core/tools.ts';
+import type { Context } from '../core/tools.ts';
 import type { Estimate, FileQuery, Job, Plan } from '../types.ts';
 
 /** Exit status of a run stopped with Ctrl-C, as a shell would report it. */
 const EXIT_CANCELLED = 130;
 const SHOWN_TAGS = 2;
+
+/** The table loads on first use: it brings in every engine, which `--help` has no use for. */
+const toolTable = () => import('../core/tools.ts');
+/** `callTool`, for commands. */
+export const callTool: typeof ToolTable.callTool = async (name, input, ctx) =>
+  (await toolTable()).callTool(name, input, ctx);
 
 /** Flags every command has. */
 export interface JsonFlag {
@@ -107,6 +114,7 @@ export async function withContext<T>(
   work: (ctx: Context) => Promise<T>,
   caller: Context['caller'] = 'cli',
 ): Promise<T> {
+  const { openContext } = await toolTable();
   const ctx = await openContext(caller, (event) => {
     if (event.type !== 'job') return;
     if (flags.json) outJson(event.job);
@@ -123,6 +131,7 @@ export async function withContext<T>(
 export async function follow(ctx: Context, job: Job): Promise<Job> {
   const cancel = () => void callTool('cancel_job', { id: job.id }, ctx);
   process.once('SIGINT', cancel);
+  const { waitForJob } = await toolTable();
   const final = await waitForJob(job.id);
   process.off('SIGINT', cancel);
   for (const warning of final.warnings ?? []) note(sanitizeLine(warning));

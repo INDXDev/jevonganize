@@ -287,7 +287,7 @@ only what a browser tab has.
 | `nodeIntegration` | `false`, set explicitly |
 | Server | In a `utilityProcess`, not the main process. `{ port, token }` reach the main process by message, never through argv or the environment |
 | New windows | Denied. `https://` links go to the system browser |
-| Navigation | `will-navigate` blocks any other origin |
+| Navigation | `will-navigate` blocks any other origin, and everything until the server reports its port |
 | Permissions | `setPermissionRequestHandler` denies all |
 | Instances | Single instance lock |
 | Native modules | Node-API prebuilt only, so no rebuild step |
@@ -326,6 +326,19 @@ These close the weak spots found in Jevlint, the project this one borrows from.
 | Tiny entry file | `cli.ts` checks Node.js first, then loads the rest through dynamic `import()`, so an old Node.js gets a clear message. `--` ends flag parsing, including `--help` |
 | Locked credentials | Read, modify and write under a lock file, as CLI and UI share it |
 | Pin the experimental API | `experimental_decide` is the core of the product. Exact versions, and only `ai/` imports it |
+
+## Local caches of code and settings
+
+Two things persist that a fresh start would not have.
+
+- **Compile cache.** The CLI keeps V8's compiled code in `<cache dir>/compile`, a `0700` folder, through
+  `module.enableCompileCache`. Node checks each entry against the source it came from, but the entries
+  are not signed: anyone who can write there can already run code as you. It holds the app's own code
+  and never file content. `NODE_DISABLE_COMPILE_CACHE=1` turns it off.
+- **`soffice` profile.** Creating a LibreOffice profile takes seconds, so each worker keeps one in a
+  private temp folder for the life of the process. A document opened earlier could only change it by
+  running a macro, so the profile is created with `MacroSecurityLevel = 3` and
+  `DisableMacrosExecution = true`. A failed or killed run deletes it, and the next starts clean.
 
 ## Some risks remain
 

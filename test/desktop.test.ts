@@ -66,16 +66,26 @@ function blocked(url: string): boolean {
   return preventDefault.mock.calls.length > 0;
 }
 
+let earlyWindow = false;
+let earlyBlock = false;
+
 describe('desktop shell', () => {
   beforeAll(async () => {
     await import('../src/desktop/main.ts');
     await vi.waitUntil(() => shell.server);
+    earlyWindow = shell.webPreferences !== undefined;
+    earlyBlock = blocked('http://127.0.0.1:48620/settings');
     shell.server?.emit('message', { port: 48620, token: 'abc' });
   });
 
   it('forks the server and loads the auth URL it reports', () => {
     expect(shell.forked[0]?.replaceAll('\\', '/')).toMatch(/\/server\/start\.mjs$/);
     expect(shell.loaded).toEqual(['http://127.0.0.1:48620/auth?t=abc']);
+  });
+
+  it('shows the window before the server is up, and lets it go nowhere until then', () => {
+    expect(earlyWindow).toBe(true);
+    expect(earlyBlock).toBe(true);
   });
 
   it('opens a sandboxed window with no preload', () => {

@@ -2,7 +2,6 @@
 import { readFile } from 'node:fs/promises';
 import type { OutputInfo, Sharp } from 'sharp';
 import type { Budget } from '../core/config.ts';
-import { isScreenCapture } from '../core/tags.ts';
 import type { FileState } from '../types.ts';
 import { type Extractor, iso, put, readRange, type SourceFile } from './source.ts';
 
@@ -97,7 +96,7 @@ export const exif: Extractor = async (file, state) => {
 };
 
 const isNamedScreenshot = (file: SourceFile) =>
-  isScreenCapture(file.path) || SCREENSHOT_NAME.test(file.name.normalize('NFC'));
+  file.screenCapture === true || SCREENSHOT_NAME.test(file.name.normalize('NFC'));
 
 const hasDisplaySize = (file: SourceFile, state: FileState) =>
   file.mime === 'image/png' &&
