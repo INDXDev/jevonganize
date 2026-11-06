@@ -1,6 +1,6 @@
 /** The Electron shell: one window over the local server. No preload and no IPC, on purpose. */
 import { join } from 'node:path';
-import { app, BrowserWindow, Menu, shell, utilityProcess } from 'electron';
+import { app, BrowserWindow, Menu, nativeTheme, shell, utilityProcess } from 'electron';
 
 let win: BrowserWindow | undefined;
 
@@ -9,7 +9,8 @@ function open({ port, token }: { port: number; token: string }): void {
   win = new BrowserWindow({
     width: 1280,
     height: 800,
-    backgroundColor: '#0e0f11',
+    // `--bg`, so the window does not flash before the page paints.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e0f11' : '#f3f4f6',
     // Elsewhere a hidden title bar would also lose the window controls.
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },

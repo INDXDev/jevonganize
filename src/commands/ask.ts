@@ -1,4 +1,5 @@
 /** `ask`: one request through the chat model, with the chat panel's tools. */
+import { t } from './i18n/index.ts';
 import { createInterface } from 'node:readline/promises';
 import type { Command } from 'commander';
 import { ask, type ChatTools, type PendingCall } from '../ai/chat.ts';
@@ -15,8 +16,8 @@ const isPlan = (value: unknown): value is Plan =>
 
 function describe(output: unknown): string {
   const { total } = (output ?? {}) as { total?: number };
-  if (total !== undefined) return `${total} matches`;
-  return Array.isArray(output) ? `${output.length} rows` : 'done';
+  if (total !== undefined) return t('{count} matches', { count: total });
+  return Array.isArray(output) ? t('{count} rows', { count: output.length }) : t('done');
 }
 
 /** The table, reporting each call. A job is waited for, so the model and the exit see its end. */
@@ -39,7 +40,8 @@ function reporting(flags: JsonFlag): ChatTools<Context> {
 async function approveAtPrompt(ctx: Context, call: PendingCall): Promise<boolean> {
   const { id } = call.input as { id?: string };
   if (call.tool === 'apply_plan' && id) printPlan(await callTool('get_plan', { id }, ctx));
-  const question = call.tool === 'apply_plan' ? 'Apply? [y/N] ' : `Run ${call.tool}? [y/N] `;
+  const question =
+    call.tool === 'apply_plan' ? t('Apply? [y/N] ') : t('Run {tool}? [y/N] ', { tool: call.tool });
   const reader = createInterface({ input: process.stdin, output: process.stderr });
   const answer = await reader.question(question);
   reader.close();
@@ -61,9 +63,11 @@ async function runAsk(request: string, flags: JsonFlag) {
         if (flags.json) outJson({ type: 'needs_approval', tool, plan_id });
         else if (plan_id && tool !== 'discard_plan')
           out(
-            `Plan ${sanitizeLine(plan_id)} needs a person. Run: jevonganize apply ${sanitizeLine(plan_id)}`,
+            t('Plan {id} needs a person. Run: jevonganize apply {id}', {
+              id: sanitizeLine(plan_id),
+            }),
           );
-        else out(`${tool} needs a person.`);
+        else out(t('{tool} needs a person.', { tool }));
       }
     },
     'chat',
@@ -72,5 +76,5 @@ async function runAsk(request: string, flags: JsonFlag) {
 
 /** Adds `ask`. */
 export function addAskCommand(program: Command): void {
-  command(program, 'ask <request>', 'Run one request through the chat model').action(runAsk);
+  command(program, 'ask <request>', t('Run one request through the chat model')).action(runAsk);
 }

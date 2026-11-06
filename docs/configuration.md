@@ -73,11 +73,74 @@ that whole class of attack does not exist.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
+| `language` | `"system"` | Interface language: PC default, `"en"` (English), `"ja"` (日本語), `"zh-CN"` (简体中文) |
 | `concurrency` | `8` | Maximum parallel model calls |
 | `max_tags` | `10` | Hard cap of tags per file on what organize adds, counting tags a person added |
 | `fiscal_year_start` | `4` | First month of the fiscal year, 1 to 12, for `fiscal-year` fields |
 | `exclude` | `["node_modules", ".git", "*.tmp", ".DS_Store", "._*", "Thumbs.db"]` | Globs to skip. Setting it replaces this default, but it adds to the [built-in secret exclusions](security.md#built-in-secret-exclusions), which cannot be turned off |
 | `send_images` | `true` | `false` keeps every image on this machine, including rendered PDF pages. Scanned files then give the model little to work with |
+
+### Interface language
+
+By default the CLI, browser UI and desktop app follow this PC's preferred UI language. The local
+server detects it, so the browser's language and `Accept-Language` do not override it. macOS reads
+`AppleLanguages`, Windows reads the user's default UI language, and Linux uses the session locale
+(`LC_ALL`, `LC_MESSAGES`, then `LANG`; `LANGUAGE` overrides the message language outside `C`/`POSIX`
+sessions). The preference is detected once per process; restart after changing the PC language.
+Japanese variants use Japanese, Chinese variants use Simplified Chinese,
+and unsupported languages use English.
+
+Choose another language in Settings > General > Language, or set it directly:
+
+```sh
+jevonganize config set language ja
+jevonganize config set language en
+jevonganize config set language zh-CN
+jevonganize config set language system
+```
+
+Saving in Settings changes the current window immediately. A CLI invocation reads the setting
+before building its help. Startup errors before valid config is available use English.
+Machine-readable output, tags, file names, facet definitions and decision prompts retain their
+original values. Shared engine/tool errors and third-party diagnostics (including provider, parser,
+native and Commander messages) can retain their original language.
+
+## `[tag_colors]`
+
+Colours in the UI, by tag or by whole facet. Change them on the Tags screen. Colours stay in this
+file: they are not written to files, and Finder's own tag colours are separate.
+
+```toml
+[tag_colors]
+"doc-type" = "blue"
+"doc-type:invoice" = "red"
+```
+
+A value is `red`, `orange`, `yellow`, `green`, `teal`, `blue`, `indigo`, `purple`, `pink`, `gray` or
+`auto`. A tag's own colour beats its facet's. Anything else gets an automatic colour from its facet
+name, the same on every machine. Renaming a tag does not carry its own colour over.
+
+## `[view]`
+
+How the file list looks. Change it from the view options in the Files toolbar (`Mod+J`), or in
+Settings. It lives here rather than in the browser, so it survives a change of port and is the same
+in the desktop app.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `show_dotfiles` | `false` | Show names starting with a dot, and what is in such folders. `Mod+Shift+.` switches it. Hidden files stay indexed, and a view's Organize and chat skip them too |
+| `include_subfolders` | `true` | Show everything under a folder. `false` shows only what sits directly in it, except while searching or filtering by tag |
+| `show_extensions` | `true` | Show file name extensions |
+| `thumbnail_size` | `160` | Width of a grid tile in pixels, 64 to 512, when `grid_columns` is `0` |
+| `grid_columns` | `0` | Tiles per row, up to 12. `0` fits as many as `thumbnail_size` allows |
+| `grid_spacing` | `10` | Space between tiles in pixels, up to 48 |
+| `thumbnail_fit` | `"cover"` | `cover` fills the tile and crops. `contain` shows the whole thumbnail |
+| `grid_info` | `"tags"` | The line under a name: `tags`, `kind`, `size`, `modified` or `none` |
+| `text_size` | `12` | File name size in pixels, 10 to 20 |
+| `list_columns` | `["tags", "size", "modified"]` | Columns after the name: `tags`, `kind`, `size`, `modified`, `path` |
+| `list_thumbnails` | `false` | Show thumbnails in the list, not icons |
+
+To keep files out of the index altogether, use `exclude`.
 
 ## `[provider]`
 

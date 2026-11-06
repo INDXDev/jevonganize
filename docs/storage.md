@@ -1,7 +1,7 @@
 # Storage
 
 Tags on disk are the truth. Everything here is an index of them, plus answers you paid for. The exact
-schema is in [contracts](contracts.md#database-coredbts). `core/db.ts` holds all the SQL.
+schema is in [contracts](contracts.md#database-coredbts). `core/db/` holds all the SQL.
 
 The index is one SQLite file, `index.db`, in the data directory. It uses `node:sqlite` in WAL mode,
 which needs Node 24.22.1 or later. `node:sqlite` is a release candidate, not yet stable. If its API
@@ -122,6 +122,11 @@ version.
 - `key` is `file.hash` with its prefix removed. A file not yet organized has no hash, so it uses the
   sha256 of `dev`, `ino`, `size` and `mtimeNs`.
 - Files are written to a temp name, then renamed.
+- Images and PDFs are drawn from the file. Text, HTML, mail and Office files are drawn from their
+  extracted text, as a page, a slide or a grid, the same on every OS. A page is never rendered for
+  its thumbnail. Old `.doc`, `.xls` and `.ppt` need `soffice`. Budgets are the defaults, not the
+  config's.
+- Video has no thumbnail here: the UI shows a frame through `<video>`, which needs no tool.
 - Thumbnails are made on first view, in a worker. Keyed by content, a renamed file or a duplicate
   costs nothing, and a changed file simply gets a new key.
 - `/thumb/:id` serves them with `Cache-Control: immutable` on a URL that holds the key.
@@ -257,8 +262,8 @@ wins:
 A scan never writes to a file. Only an applied plan does.
 
 **`doctor`** reports the state of the installation, and changes nothing. It checks the runtime, the
-provider key, each library's volume, through `supported()`, and the optional tools `soffice`, `ffmpeg`
-and `qlmanage`.
+provider key, each library's volume, through `supported()`, and the optional tools `soffice` and
+`ffmpeg`.
 
 ## Performance
 

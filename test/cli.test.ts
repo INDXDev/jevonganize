@@ -1,53 +1,15 @@
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Command } from 'commander';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { nodeSupported } from '../src/commands/floor.ts';
 import { buildProgram } from '../src/commands/index.ts';
 import { readTags, writeTags } from '../src/core/tags.ts';
-import type { Estimate, Job, Plan } from '../src/types.ts';
-import { useTempHome } from './helpers.ts';
+import type { Job } from '../src/types.ts';
+import { CLI, cli, home, lines, ndjson, root, setupCliHome } from './cli-helpers.ts';
 
-const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
-
-vi.setConfig({ testTimeout: 60_000 }); // each step spawns a real process
-
-const home = useTempHome();
-let root: string;
-
-interface Result {
-  code: number | null;
-  stdout: string;
-  stderr: string;
-}
-
-/** Runs the real CLI, async so a stub provider in this process can answer it. */
-function cli(args: string[], options: { stdin?: string; env?: Record<string, string> } = {}) {
-  return new Promise<Result>((done, fail) => {
-    const child = spawn(process.execPath, [CLI, ...args], {
-      env: { ...process.env, JEVONGANIZE_HOME: home(), NO_COLOR: '1', ...options.env },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => (stdout += String(chunk)));
-    child.stderr.on('data', (chunk) => (stderr += String(chunk)));
-    child.on('error', fail);
-    child.on('close', (code) => done({ code, stdout, stderr }));
-    child.stdin.end(options.stdin ?? '');
-  });
-}
-
-const lines = (text: string) => text.trim().split('\n').filter(Boolean);
-const ndjson = <T>(text: string) => lines(text).map((line) => JSON.parse(line) as T);
-
-beforeEach(async () => {
-  root = join(home(), 'library');
-  await mkdir(root);
-});
+setupCliHome();
 
 describe('the floor', () => {
   test.each([
@@ -87,7 +49,9 @@ describe('usage', () => {
     expect(code).toBe(2);
     expect(stderr).toContain('cannot be combined');
   });
+});
 
+describe('the documented commands', () => {
   test('every documented command exists, with --json', async () => {
     const commands = [
       ['setup'],
@@ -229,6 +193,22 @@ describe('tags', () => {
     expect(await readTags(join(root, 'b.txt'))).toEqual([]);
     expect(await readTags(join(root, 'a.txt'))).toEqual(['doc-type:invoice', 'x']);
   });
+});
+
+describe('tags: matching and failures', () => {
+  test('--tag-match any widens a repeated --tag', async () => {
+    await writeFile(join(root, 'a.txt'), 'a');
+    await writeFile(join(root, 'b.txt'), 'b');
+    await writeTags(join(root, 'a.txt'), ['topic:law']);
+    await writeTags(join(root, 'b.txt'), ['topic:tax']);
+    await cli(['scan', root]);
+    const flags = ['--tag', 'topic:law', '--tag', 'topic:tax'];
+    expect((await cli(['search', ...flags])).stdout).not.toContain('a.txt');
+    const any = (await cli(['search', ...flags, '--tag-match', 'any'])).stdout;
+    expect(any).toContain('a.txt');
+    expect(any).toContain('b.txt');
+    expect((await cli(['search', ...flags, '--tag-match', 'some'])).code).toBe(2);
+  });
 
   test('an invalid tag is refused with exit 2', async () => {
     await cli(['scan', root]);
@@ -247,260 +227,6 @@ describe('tags', () => {
     const result = await cli(['apply', /Plan ([0-9a-f]{8})/.exec(stdout)?.[1] ?? '']);
     expect(result.code).toBe(1);
     expect(await readTags(join(root, 'b.txt'))).toEqual(['x']);
-  });
-});
-
-describe('settings', () => {
-  test('config set parses TOML, validates, and get reads it back', async () => {
-    expect((await cli(['config', 'set', 'thresholds.apply', '0.9'])).stdout).toBe(
-      'thresholds.apply = 0.9\n',
-    );
-    expect((await cli(['config', 'get', 'thresholds.apply'])).stdout).toBe('0.9\n');
-    await cli(['config', 'set', 'exclude', '["a", "b"]']);
-    expect((await cli(['config', 'get', 'exclude'])).stdout).toContain('"a"');
-    expect((await cli(['config', 'set', 'nope', '1'])).code).toBe(2);
-    expect((await cli(['config', 'get', 'nope'])).code).toBe(2);
-    const json = JSON.parse((await cli(['config', 'get', '--json'])).stdout) as object;
-    expect(json).toHaveProperty('schema');
-  });
-
-  test('config edit saves a valid file and never an invalid one', async () => {
-    const script = join(home(), 'edit.mjs');
-    const write = `import { writeFileSync as w } from 'node:fs'; w(process.argv[2], process.env.CONTENT);`;
-    await writeFile(script, write);
-    const editor = `${process.execPath} ${script}`; // Node, as Windows cannot run a shell script
-    const good = await cli(['config', 'edit'], {
-      env: { VISUAL: editor, CONTENT: 'concurrency = 3\n' },
-    });
-    expect(good.code).toBe(0);
-    const bad = await cli(['config', 'edit'], { env: { VISUAL: editor, CONTENT: 'nope = 3\n' } });
-    expect(bad.code).toBe(2);
-    expect((await cli(['config', 'get', 'concurrency'])).stdout).toBe('3\n');
-  });
-
-  test('config path prints three paths inside the home', async () => {
-    const paths = lines((await cli(['config', 'path'])).stdout);
-    expect(paths).toHaveLength(3);
-    for (const path of paths) expect(path.startsWith(home())).toBe(true);
-  });
-
-  test('auth stores from a pipe, never prints the key, and env consent is explicit', async () => {
-    await cli(['auth', 'set', 'openai'], { stdin: 'sk-secret\n' });
-    const listed = await cli(['auth', 'list']);
-    expect(listed.stdout).toMatch(/openai\s+file/);
-    expect(listed.stdout).not.toContain('sk-secret');
-    const env = { TYPESAFE_AI_API_KEY: 'from-env' };
-    expect((await cli(['auth', 'list'], { env })).stdout).toMatch(/typesafe\s+none/);
-    await cli(['auth', 'env', 'on']);
-    expect((await cli(['auth', 'list'], { env })).stdout).toMatch(/typesafe\s+env/);
-    expect((await cli(['auth', 'env', 'maybe'])).code).toBe(2);
-    expect((await cli(['auth', 'remove', 'openai'])).stdout).toContain('Removed');
-    expect((await cli(['auth', 'set', 'nobody'], { stdin: 'k' })).code).toBe(2);
-  });
-
-  test('facets list, show, enable and disable', async () => {
-    expect((await cli(['facets', 'list'])).stdout).toMatch(/\* core/);
-    expect((await cli(['facets', 'show', 'visibility'])).stdout).toContain('public');
-    expect((await cli(['facets', 'show', 'nope'])).code).toBe(2);
-    await cli(['facets', 'enable', 'finance']);
-    expect((await cli(['facets', 'list'])).stdout).toMatch(/\* finance/);
-    await cli(['facets', 'disable', 'finance']);
-    expect((await cli(['facets', 'list'])).stdout).toMatch(/ {2}finance/);
-  });
-
-  test('doctor exits 1 when a required check fails', async () => {
-    const failing = await cli(['doctor']);
-    expect(failing.code).toBe(1);
-    expect(failing.stdout).toContain('FAIL');
-    await cli(['auth', 'set', 'openai'], { stdin: 'k' });
-    expect((await cli(['doctor', '--json'])).code).toBe(0);
-  });
-
-  test('cleanup and review print nothing to do on an empty index', async () => {
-    expect((await cli(['cleanup'])).code).toBe(0);
-    expect((await cli(['review'])).stdout).toBe('');
-    expect((await cli(['review', '--accept', 'all'])).code).toBe(2);
-    expect((await cli(['review', '--accept', '1', '--reject', '2'])).code).toBe(2);
-  });
-});
-
-describe('setup', () => {
-  test('--yes needs --folder, and a terminal is needed without it', async () => {
-    expect((await cli(['setup', '--yes'])).code).toBe(2);
-    const piped = await cli(['setup']);
-    expect(piped.code).toBe(2);
-    expect(piped.stderr).toContain('terminal');
-  });
-
-  test('--yes needs a key stored or piped', async () => {
-    const { code, stderr } = await cli(['setup', '--yes', '--folder', root]);
-    expect(code).toBe(2);
-    expect(stderr).toContain('No key');
-  });
-
-  test('--yes takes a piped key, adds, enables, scans, and writes no tags', async () => {
-    const path = join(root, 'a.txt');
-    await writeFile(path, 'hello');
-    const { code, stdout } = await cli(
-      ['setup', '--yes', '--folder', root, '--packs', 'core,finance'],
-      { stdin: 'sk-test' },
-    );
-    expect(code).toBe(0);
-    expect(stdout).toContain('Scanned 1 files in');
-    expect(stdout).toContain('Next: jevonganize organize');
-    expect(await readTags(path)).toEqual([]);
-    expect((await cli(['auth', 'list'])).stdout).toMatch(/openai\s+file/);
-    const list = (await cli(['facets', 'list'])).stdout;
-    expect(list).toMatch(/\* finance/);
-    expect(list).toMatch(/ {2}time/);
-  });
-});
-
-test('ask with no key refuses with exit 2', async () => {
-  const { code, stderr } = await cli(['ask', 'hello']);
-  expect(code).toBe(2);
-  expect(stderr).toContain('API key');
-});
-
-/** A provider's reply: `invoice` at `p`, with the complete distribution the SDK requires. */
-function answerAll(body: string, p: number) {
-  const { questions } = JSON.parse(body) as {
-    questions: Record<string, { type: string; criteria: object }>;
-  };
-  return Object.fromEntries(
-    Object.entries(questions).map(([id, { type, criteria }]) => {
-      if (type === 'noul') return [id, { type, noul: 0.01 }];
-      const rest = Object.keys(criteria).filter((label) => label !== 'invoice');
-      const others = rest.map((label) => [label, (1 - p) / rest.length]);
-      const probabilities = Object.fromEntries([['invoice', p], ...others]);
-      return [id, { type: 'choice', choice: 'invoice', probabilities }];
-    }),
-  );
-}
-
-describe('organize against a stub provider', () => {
-  let stub: Server;
-  let requests: string[];
-
-  beforeEach(async () => {
-    requests = [];
-    stub = createServer((request, response) => {
-      let body = '';
-      request.on('data', (chunk) => (body += String(chunk)));
-      request.on('end', () => {
-        requests.push(body);
-        response.setHeader('content-type', 'application/json');
-        response.end(
-          JSON.stringify({ answers: answerAll(body, 0.99), usage: { input_tokens: 10 } }),
-        );
-      });
-    });
-    await new Promise<void>((done) => {
-      stub.listen(0, '127.0.0.1', done);
-    });
-    const { port } = stub.address() as AddressInfo;
-    await mkdir(join(home(), 'config'), { recursive: true });
-    await writeFile(
-      join(home(), 'config', 'config.toml'),
-      `[provider]\nname = "openrouter"\nmodel = "jev"\nbase_url = "http://127.0.0.1:${port}"\n`,
-    );
-    await cli(['auth', 'set', 'openrouter'], { stdin: 'test-key' });
-  });
-
-  afterEach(async () => {
-    await new Promise((done) => {
-      stub.close(done);
-    });
-  });
-
-  test('scan, organize, apply, undo, all through the real binary', async () => {
-    const path = join(root, 'invoice.txt');
-    await writeFile(path, 'Invoice 44');
-    await cli(['scan', root]);
-
-    const organized = await cli(['organize', root, '--facets', 'doc-type']);
-    expect(organized.code).toBe(0);
-    expect(organized.stderr).toContain('tokens');
-    expect(organized.stdout).toContain('doc-type:invoice');
-    expect(organized.stdout).toContain('Nothing was written.');
-    expect(await readTags(path)).toEqual([]);
-    expect(requests).toHaveLength(1);
-    expect(requests[0]).toContain('Invoice 44');
-    expect(requests[0]).not.toContain(root); // the folder path stays here
-
-    const id = /Plan ([0-9a-f]{8})/.exec(organized.stdout)?.[1] ?? '';
-    const plan = JSON.parse((await cli(['plans', id, '--json'])).stdout) as Plan;
-    expect(plan).toMatchObject({ source: 'organize', status: 'proposed' });
-    await cli(['apply', id]);
-    expect(await readTags(path)).toEqual(['doc-type:invoice']);
-    await cli(['undo', id]);
-    expect(await readTags(path)).toEqual([]);
-  });
-
-  test('--json is NDJSON with plan_id last, --apply appends the apply job, and answers are cached', async () => {
-    const path = join(root, 'invoice.txt');
-    await writeFile(path, 'Invoice 44');
-    await cli(['scan', root]);
-    const { stdout } = await cli(['organize', root, '--facets', 'doc-type', '--json']);
-    const organizeJob = ndjson<Job>(stdout).at(-1);
-    expect(organizeJob).toMatchObject({ kind: 'organize', status: 'done' });
-    expect(organizeJob?.plan_id).toBeTruthy();
-    const dry = await cli(['organize', root, '--facets', 'doc-type', '--dry-run', '--json']);
-    expect(JSON.parse(dry.stdout)).toMatchObject<Partial<Estimate>>({ cached: 1 });
-
-    const applied = await cli(['organize', root, '--facets', 'doc-type', '--apply', '--json']);
-    const jobs = ndjson<Job>(applied.stdout);
-    expect(jobs.at(-1)).toMatchObject({ kind: 'apply', status: 'done' });
-    expect(requests).toHaveLength(1);
-    expect(await readTags(path)).toEqual(['doc-type:invoice']);
-  });
-
-  test('every file failing is exit 2', async () => {
-    await writeFile(join(root, 'a.txt'), 'x');
-    await cli(['scan', root]);
-    stub.removeAllListeners('request');
-    stub.on('request', (_request, response) => {
-      response.statusCode = 400;
-      response.end('no');
-    });
-    const { code, stderr } = await cli(['organize', root, '--facets', 'doc-type']);
-    expect(code).toBe(2);
-    expect(stderr).toContain('Every file failed');
-  });
-
-  test('a rejected key is exit 2, and nothing is stored as a plan', async () => {
-    await writeFile(join(root, 'a.txt'), 'x');
-    await cli(['scan', root]);
-    stub.removeAllListeners('request');
-    stub.on('request', (_request, response) => {
-      response.statusCode = 401;
-      response.end('no');
-    });
-    const { code, stderr } = await cli(['organize', root, '--facets', 'doc-type']);
-    expect(code).toBe(2);
-    expect(stderr).toContain('rejected the API key');
-    expect((await cli(['plans'])).stdout).toBe('');
-  });
-
-  test('review accepts into tags, through a plan', async () => {
-    const path = join(root, 'a.txt');
-    await writeFile(path, 'x');
-    await cli(['scan', root]);
-    stub.removeAllListeners('request');
-    stub.on('request', (request, response) => {
-      let body = '';
-      request.on('data', (chunk) => (body += String(chunk)));
-      request.on('end', () => {
-        response.setHeader('content-type', 'application/json');
-        response.end(JSON.stringify({ answers: answerAll(body, 0.6) }));
-      });
-    });
-    await cli(['organize', root, '--facets', 'doc-type']);
-    const listed = await cli(['review']);
-    expect(listed.stdout).toContain('doc-type:invoice (1)');
-    const accepted = await cli(['review', '--tag', 'doc-type:invoice', '--accept', 'all']);
-    expect(accepted.stdout).toBe('Accepted 1 items.\n');
-    expect(await readTags(path)).toEqual(['doc-type:invoice']);
   });
 });
 

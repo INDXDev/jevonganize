@@ -1,5 +1,10 @@
 # CLI reference
 
+Human-facing help, prompts and results follow the global `language` setting (`system` by default).
+Set `language` to `en`, `ja` or `zh-CN` to override the PC language, or back to `system` to follow it.
+Commands, flags, config keys, JSON and MCP data keep their stable names. Shared engine/tool and
+third-party diagnostics may retain their original language. See [Interface language](configuration.md#interface-language).
+
 Every command runs tools in-process, so none needs a running server. Each maps to entries in the
 [tool table](contracts.md#the-tool-table), and the tables below say which.
 
@@ -53,14 +58,17 @@ files.
 | `config set` | `set_config` |
 | `config path`, `config edit` | None. Local file operations |
 | `auth set` | `set_api_key` |
-| `auth list`, `auth remove`, `auth env` | None. They use `core/credentials.ts` |
+| `auth list` | `list_keys` |
+| `auth remove` | `remove_api_key` |
+| `auth env` | `set_env_keys`, `list_keys` |
 | `ask` | None directly. Runs `chat()` from `ai/chat.ts`, which calls `agent: true` tools |
 | `cleanup` | `cleanup_report` |
 | `doctor` | `doctor` |
 | `mcp` | Serves every `agent: true` tool. See [llm-native.md](llm-native.md) |
 
-These tools have no command: `status`, `list_libraries`, `remove_library`, `browse_dirs`,
-`save_facet`, `delete_facet`, `cancel_job`, `reveal_file`. Use the UI. Facets can also be edited as
+These tools have no command: `status`, `list_libraries`, `list_folders`, `remove_library`, `browse_dirs`,
+`save_facet`, `delete_facet`, `cancel_job`, `reveal_file`, `list_vocabulary`, `set_vocabulary`. Use
+the UI. Facets can also be edited as
 files, see [presets.md](presets.md), and Ctrl-C stops a job in the terminal.
 
 ## Files and queries
@@ -73,7 +81,8 @@ Commands marked "query flags" accept these, which fill a `FileQuery`:
 | Flag | Field |
 | --- | --- |
 | `--folder <path>` | `folder` |
-| `--tag <tag>` | `tags`. Repeatable, and all must match |
+| `--tag <tag>` | `tags`. Repeatable, and all must match unless `--tag-match any` says otherwise |
+| `--tag-match <mode>` | `tag_match`: `all` (the default) or `any` |
 | `--not-tag <tag>` | `exclude_tags`. Repeatable |
 | `--mime <type>` | `mime`, such as `application/pdf` or `image/*` |
 | `--status <status>` | `status`: `new`, `organized` or `failed` |

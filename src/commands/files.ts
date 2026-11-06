@@ -1,4 +1,5 @@
 /** Commands over files: scan, organize, plans, search, tags, review. Thin: tools do the work. */
+import { t, statusLabel } from './i18n/index.ts';
 import { stat } from 'node:fs/promises';
 import { sep } from 'node:path';
 import type { Command } from 'commander';
@@ -42,7 +43,8 @@ function size(bytes: number): string {
 
 const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
-const nothingWritten = (id: string) => out(`Nothing was written. Run: jevonganize apply ${id}`);
+const nothingWritten = (id: string) =>
+  out(t('Nothing was written. Run: jevonganize apply {id}', { id }));
 
 async function runScan(path: string | undefined, flags: JsonFlag) {
   await withFlags(flags, async (ctx) => {
@@ -54,17 +56,27 @@ async function runScan(path: string | undefined, flags: JsonFlag) {
     const final = await follow(ctx, await callTool('scan', { path: root }, ctx));
     if (flags.json || !final.scan) return;
     const { files, added, changed, restores, skipped } = final.scan;
-    const parts = [`${count(files)} files`, `${count(added)} new`, `${count(changed)} changed`];
-    if (restores > 0) parts.push(`${count(restores)} restore items`);
-    out(`Scanned ${root === undefined ? 'all libraries' : shown(root)}: ${parts.join(', ')}.`);
-    if (skipped > 0) out(`Skipped ${count(skipped)} by exclusion rules.`);
+    const parts = [
+      t('{count} files', { count: count(files) }),
+      t('{count} new', { count: count(added) }),
+      t('{count} changed', { count: count(changed) }),
+    ];
+    if (restores > 0) parts.push(t('{count} restore items', { count: count(restores) }));
+    out(
+      t('Scanned {root}: {summary}.', {
+        root: root === undefined ? t('all libraries') : shown(root),
+        summary: parts.join(', '),
+      }),
+    );
+    if (skipped > 0) out(t('Skipped {count} by exclusion rules.', { count: count(skipped) }));
   });
 }
 
 async function requireLibraryPath(path: string, ctx: Context): Promise<void> {
   const libraries = await callTool('list_libraries', {}, ctx);
   const inside = libraries.some((lib) => path === lib.path || path.startsWith(lib.path + sep));
-  if (!inside) throw new UserError(`${path} is not in a library. Run: jevonganize scan ${path}`);
+  if (!inside)
+    throw new UserError(t('{path} is not in a library. Run: jevonganize scan {path}', { path }));
 }
 
 interface OrganizeFlags extends JsonFlag {
@@ -80,11 +92,13 @@ function printOrganized(plan: Plan, reviews: number): void {
     .toSorted(([, a], [, b]) => b - a)
     .slice(0, TOP_TAGS);
   for (const [tag, total] of top) out(`  ${sanitizeLine(tag).padEnd(24)}${count(total)}`);
-  if (reviews > 0) out(`${count(reviews)} items need review: jevonganize review`);
+  if (reviews > 0)
+    out(t('{count} items need review: jevonganize review', { count: count(reviews) }));
 }
 
 async function runOrganize(path: string, flags: OrganizeFlags) {
-  if (flags.dryRun && flags.apply) throw new UserError('--dry-run and --apply cannot be combined');
+  if (flags.dryRun && flags.apply)
+    throw new UserError(t('--dry-run and --apply cannot be combined'));
   await withFlags(flags, async (ctx) => {
     const folder = indexedPath(path);
     await requireLibraryPath(folder, ctx);
@@ -94,16 +108,22 @@ async function runOrganize(path: string, flags: OrganizeFlags) {
     if (flags.dryRun) {
       if (flags.json) return outJson(estimate);
       const { files, cached, facets } = estimate;
-      out(`${count(files)} files, ${count(cached)} cached, ${count(facets)} facets`);
+      out(
+        t('{files} files, {cached} cached, {facets} facets', {
+          files: count(files),
+          cached: count(cached),
+          facets: count(facets),
+        }),
+      );
       out(costLine(estimate));
-      return out('Nothing was sent.');
+      return out(t('Nothing was sent.'));
     }
     note(costLine(estimate));
     await askEnvConsent(ctx.config.provider.name);
     const final = await follow(ctx, await callTool('organize', input, ctx));
     if (final.status === 'cancelled' || !final.plan_id) return undefined;
     if (final.total > 0 && final.failed === final.total) {
-      throw new UserError('Every file failed. See the warnings above');
+      throw new UserError(t('Every file failed. See the warnings above'));
     }
     const plan = await callTool('get_plan', { id: final.plan_id }, ctx);
     if (!flags.json) {
@@ -120,7 +140,7 @@ function printPlanRow(plan: Plan): void {
   const cells = [
     plan.id,
     plan.source.padEnd(9),
-    `${count(files)} files`.padEnd(11),
+    t('{count} files', { count: count(files) }).padEnd(11),
     change.padEnd(10),
   ];
   out(`${cells.join(' ')} ${sanitizeLine(plan.title)}`);
@@ -132,7 +152,7 @@ async function runPlans(id: string | undefined, flags: JsonFlag & { status?: Pla
       const plan = await callTool('get_plan', { id }, ctx);
       if (flags.json) return outJson(plan);
       printPlan(plan);
-      return out(`Status: ${plan.status}`);
+      return out(t('Status: {status}', { status: statusLabel(plan.status) }));
     }
     const plans = await callTool('list_plans', { status: flags.status }, ctx);
     if (flags.json) return outJson(plans);
@@ -144,7 +164,8 @@ async function runUndo(id: string, flags: JsonFlag) {
   await withFlags(flags, async (ctx) => {
     const final = await follow(ctx, await callTool('undo_plan', { id }, ctx));
     reportErrors(await callTool('get_plan', { id }, ctx));
-    if (!flags.json && final.status === 'done') out(`Undid ${id}: ${count(final.total)} files.`);
+    if (!flags.json && final.status === 'done')
+      out(t('Undid {id}: {count} files.', { id, count: count(final.total) }));
   });
 }
 
@@ -190,7 +211,12 @@ async function runSearch(text: string | undefined, flags: JsonFlag & QueryFlags)
     for (const file of result.files) {
       out(`${shown(file.path)}  ${size(file.size)}  ${day(file.mtime_ms)}  ${someTags(file.tags)}`);
     }
-    return out(`${count(result.files.length)} of ${count(result.total)} files`);
+    return out(
+      t('{shown} of {total} files', {
+        shown: count(result.files.length),
+        total: count(result.total),
+      }),
+    );
   });
 }
 
@@ -199,19 +225,27 @@ async function runShow(arg: string, flags: JsonFlag) {
     const file = await fileArg(arg, ctx);
     if (flags.json) return outJson(file);
     out(`${shown(file.path)}  (id ${file.id})`);
-    const mime = sanitizeLine(file.mime ?? 'unknown type');
-    out(`${mime}, ${size(file.size)}, modified ${day(file.mtime_ms)}, ${file.status}`);
-    if (file.tags.length > 0) out(`Tags     ${file.tags.map(sanitizeLine).join('  ')}`);
+    const mime = sanitizeLine(file.mime ?? t('unknown type'));
+    out(
+      t('{mime}, {size}, modified {date}, {status}', {
+        mime,
+        size: size(file.size),
+        date: day(file.mtime_ms),
+        status: statusLabel(file.status),
+      }),
+    );
+    if (file.tags.length > 0)
+      out(t('Tags     {tags}', { tags: file.tags.map(sanitizeLine).join('  ') }));
     const answers = file.answers.filter((answer) => answer.value !== null);
     if (answers.length > 0) {
       const line = answers.map(
         (a) => `${a.facet} ${a.value} ${a.confidence === null ? 'n/a' : a.confidence.toFixed(2)}`,
       );
-      out(`Answers  ${sanitizeLine(line.join(' / '))}`);
+      out(t('Answers  {answers}', { answers: sanitizeLine(line.join(' / ')) }));
     }
     for (const item of file.reviews) {
       const confidence = item.confidence === null ? 'n/a' : item.confidence.toFixed(2);
-      out(`Review   ${sanitizeLine(item.tag)} ${confidence}`);
+      out(t('Review   {tag} {confidence}', { tag: sanitizeLine(item.tag), confidence }));
     }
     return undefined;
   });
@@ -240,7 +274,7 @@ interface ReviewFlags extends JsonFlag {
 
 async function reviewIds(value: string, tag: string | undefined, ctx: Context): Promise<number[]> {
   if (value !== 'all') return commaList(value).map(Number);
-  if (tag === undefined) throw new UserError('"all" needs --tag');
+  if (tag === undefined) throw new UserError(t('"all" needs --tag'));
   return (await callTool('list_reviews', { tag }, ctx)).map((item) => item.id);
 }
 
@@ -248,7 +282,7 @@ async function printReviews(items: ReviewItem[], ctx: Context): Promise<void> {
   const groups = Map.groupBy(items, (item) => `${item.kind}\n${item.tag}`);
   for (const [key, group] of groups) {
     const [kind = '', tag = ''] = key.split('\n');
-    out(`${kind === 'restore' ? 'restore: ' : ''}${sanitizeLine(tag)} (${count(group.length)})`);
+    out(`${kind === 'restore' ? t('restore: ') : ''}${sanitizeLine(tag)} (${count(group.length)})`);
     for (const item of group) {
       const { path } = await callTool('get_file', { id: item.file_id }, ctx);
       const confidence = item.confidence === null ? 'n/a ' : item.confidence.toFixed(2);
@@ -260,7 +294,7 @@ async function printReviews(items: ReviewItem[], ctx: Context): Promise<void> {
 
 async function runReview(flags: ReviewFlags) {
   if (flags.accept !== undefined && flags.reject !== undefined) {
-    throw new UserError('--accept and --reject cannot be combined');
+    throw new UserError(t('--accept and --reject cannot be combined'));
   }
   await withFlags(flags, async (ctx) => {
     const chosen = flags.accept ?? flags.reject;
@@ -277,7 +311,12 @@ async function runReview(flags: ReviewFlags) {
       reportErrors(await callTool('get_plan', { id: plan.id }, ctx));
       if (final.status !== 'done') return undefined;
     }
-    if (!flags.json) out(`${accept ? 'Accepted' : 'Rejected'} ${count(ids.length)} items.`);
+    if (!flags.json)
+      out(
+        t(accept ? 'Accepted {count} items.' : 'Rejected {count} items.', {
+          count: count(ids.length),
+        }),
+      );
     return undefined;
   });
 }
@@ -288,7 +327,7 @@ async function runSuggest(arg: string, flags: JsonFlag) {
     const { id } = await fileArg(arg, ctx);
     const items = await callTool('suggest_tags', { id }, ctx);
     if (flags.json) return outJson(items);
-    out(`Added ${count(items.length)} review items:`);
+    out(t('Added {count} review items:', { count: count(items.length) }));
     for (const item of items) out(`  ${item.id}  ${sanitizeLine(item.tag)}`);
     return undefined;
   });
@@ -299,15 +338,20 @@ async function runCleanup(flags: JsonFlag) {
     const report = await callTool('cleanup_report', {}, ctx);
     if (flags.json) return outJson(report);
     const { files } = await callTool('status', {}, ctx);
-    out('Near-duplicates');
+    out(t('Near-duplicates'));
     for (const { tags, files: total } of report.near_duplicates) {
       out(`  ${tags.map(sanitizeLine).join(' / ')}   ${count(total)}`);
     }
-    out('One file');
+    out(t('One file'));
     for (const { tag } of report.single_use) out(`  ${sanitizeLine(tag)}`);
-    out('Over-broad');
+    out(t('Over-broad'));
     for (const row of report.over_broad) {
-      out(`  ${sanitizeLine(row.tag)}   on ${Math.round((row.count / files) * 100)}% of files`);
+      out(
+        t('  {tag}   on {percent}% of files', {
+          tag: sanitizeLine(row.tag),
+          percent: Math.round((row.count / files) * 100),
+        }),
+      );
     }
     return undefined;
   });
@@ -325,57 +369,65 @@ async function runTagsList(flags: JsonFlag & { folder?: string; facet?: string }
 
 /** Adds the commands of this file. */
 export function addFileCommands(program: Command): void {
-  command(program, 'scan [path]', 'Update the index. Free and local').action(runScan);
+  command(program, 'scan [path]', t('Update the index. Free and local')).action(runScan);
 
-  command(program, 'organize <path>', 'Classify files and produce a plan')
-    .option('--dry-run', 'Print the estimate and stop')
-    .option('--apply', 'Apply the plan when it is ready')
-    .option('--facets <ids>', 'Comma-separated facets or packs for this run', commaList)
-    .option('--limit <n>', 'Organize at most this many files', Number)
+  command(program, 'organize <path>', t('Classify files and produce a plan'))
+    .option('--dry-run', t('Print the estimate and stop'))
+    .option('--apply', t('Apply the plan when it is ready'))
+    .option('--facets <ids>', t('Comma-separated facets or packs for this run'), commaList)
+    .option('--limit <n>', t('Organize at most this many files'), Number)
     .action(runOrganize);
 
-  command(program, 'plans [id]', 'List plans, or show one')
-    .option('--status <status>', 'proposed, applied, undone or failed')
+  command(program, 'plans [id]', t('List plans, or show one'))
+    .option('--status <status>', t('proposed, applied, undone or failed'))
     .action(runPlans);
 
-  command(program, 'apply <id>', 'Apply a stored plan').action(
+  command(program, 'apply <id>', t('Apply a stored plan')).action(
     async (id: string, flags: JsonFlag) =>
       withFlags(flags, (ctx) => applyAndReport(ctx, id, flags.json)),
   );
 
-  command(program, 'undo <id>', 'Reverse an applied plan').action(runUndo);
+  command(program, 'undo <id>', t('Reverse an applied plan')).action(runUndo);
 
-  const tags = program.command('tags').description('List and change tags');
-  command(tags, 'list', 'Tags with counts')
-    .option('--folder <path>', 'Only this folder')
-    .option('--facet <id>', 'Only this facet')
+  const tags = program.command('tags').description(t('List and change tags'));
+  command(tags, 'list', t('Tags with counts'))
+    .option('--folder <path>', t('Only this folder'))
+    .option('--facet <id>', t('Only this facet'))
     .action(runTagsList);
   for (const change of ['add', 'remove'] as const) {
-    queryFlags(command(tags, `${change} <path> <tag...>`, `Plan to ${change} tags`))
-      .option('--apply', 'Apply the plan at once')
+    queryFlags(
+      command(
+        tags,
+        `${change} <path> <tag...>`,
+        t(change === 'add' ? 'Plan to add tags' : 'Plan to remove tags'),
+      ),
+    )
+      .option('--apply', t('Apply the plan at once'))
       .action(runTagChange(change));
   }
-  command(tags, 'rename <from> <to>', 'Plan to rename a tag on every file that has it')
-    .option('--apply', 'Apply the plan at once')
+  command(tags, 'rename <from> <to>', t('Plan to rename a tag on every file that has it'))
+    .option('--apply', t('Apply the plan at once'))
     .action(async (from: string, to: string, flags: TagFlags) =>
       withFlags(flags, async (ctx) =>
         finishPlan(await callTool('rename_tag', { from, to }, ctx), flags, ctx),
       ),
     );
 
-  queryFlags(command(program, 'search [text]', 'Search by text and file name')).action(runSearch);
-  command(program, 'show <file>', 'Show one file').action(runShow);
-  command(program, 'similar <file>', 'List similar files')
-    .option('--limit <n>', 'Files to list', Number)
+  queryFlags(command(program, 'search [text]', t('Search by text and file name'))).action(
+    runSearch,
+  );
+  command(program, 'show <file>', t('Show one file')).action(runShow);
+  command(program, 'similar <file>', t('List similar files'))
+    .option('--limit <n>', t('Files to list'), Number)
     .action(runSimilar);
-  command(program, 'review', 'List items waiting for a person, or resolve them')
-    .option('--tag <tag>', 'Only this tag')
-    .option('--limit <n>', 'Items to list', Number)
-    .option('--accept <ids>', 'Accept comma-separated ids, or all')
-    .option('--reject <ids>', 'Reject comma-separated ids, or all')
+  command(program, 'review', t('List items waiting for a person, or resolve them'))
+    .option('--tag <tag>', t('Only this tag'))
+    .option('--limit <n>', t('Items to list'), Number)
+    .option('--accept <ids>', t('Accept comma-separated ids, or all'))
+    .option('--reject <ids>', t('Reject comma-separated ids, or all'))
     .action(runReview);
-  command(program, 'suggest <file>', 'Ask the chat model for candidate tags').action(runSuggest);
-  command(program, 'cleanup', 'Report near-duplicate, one-file and over-broad tags').action(
+  command(program, 'suggest <file>', t('Ask the chat model for candidate tags')).action(runSuggest);
+  command(program, 'cleanup', t('Report near-duplicate, one-file and over-broad tags')).action(
     runCleanup,
   );
 }

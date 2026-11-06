@@ -80,7 +80,9 @@ describe('resolveModel', () => {
   test('cloudflare needs account_id', async () => {
     await expect(resolveModel(config({ name: 'cloudflare' }))).rejects.toThrow('account_id');
   });
+});
 
+describe('resolveModel profiles and targets', () => {
   test('a profile picks its own provider, and a missing one refuses', async () => {
     const withProfile = config(
       { name: 'openai' },
@@ -184,23 +186,23 @@ const failure = () =>
     (error: { isRetryable: boolean; statusCode: number; requestBodyValues: unknown }) => error,
   );
 
-describe('openrouter', () => {
-  const reply = {
-    model: 'cloudflare/clef-flash',
-    id: 'gen-1',
-    answers: {
-      a: { type: 'noul', noul: 0.8607 },
-      b: {
-        type: 'choice',
-        choice: 'x',
-        probabilities: { x: 0.9844, y: 0.0156 },
-        confidence: 0.95,
-      },
-      c: { type: 'score', score: 0.75, probabilities: { 0: 0.25, 1: 0.75 }, confidence: 0.5 },
+const reply = {
+  model: 'cloudflare/clef-flash',
+  id: 'gen-1',
+  answers: {
+    a: { type: 'noul', noul: 0.8607 },
+    b: {
+      type: 'choice',
+      choice: 'x',
+      probabilities: { x: 0.9844, y: 0.0156 },
+      confidence: 0.95,
     },
-    usage: { input_tokens: 289, output_tokens: 0, cost: 0.00002601 },
-  };
+    c: { type: 'score', score: 0.75, probabilities: { 0: 0.25, 1: 0.75 }, confidence: 0.5 },
+  },
+  usage: { input_tokens: 289, output_tokens: 0, cost: 0.00002601 },
+};
 
+describe('openrouter', () => {
   test('sends the documented wire shape and maps answers back', async () => {
     fetcher.mockResolvedValue(Response.json(reply));
     const result = await experimental_decide({
@@ -240,7 +242,9 @@ describe('openrouter', () => {
       experimental_decide({ model, state: 's', questions: { a: questions.a } }),
     ).rejects.toMatchObject({ questionIds: ['a'] });
   });
+});
 
+describe('openrouter failures', () => {
   test('an in-flight budget 402 is retried, and other 402s are not', async () => {
     fetcher.mockResolvedValueOnce(budget());
     expect(await failure()).toMatchObject({

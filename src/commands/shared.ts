@@ -1,4 +1,5 @@
 /** What every command shares: output, flags, and waiting for jobs. Only this layer prints. */
+import { t, getLanguage } from './i18n/index.ts';
 import { homedir } from 'node:os';
 import { sep } from 'node:path';
 import type { Command } from 'commander';
@@ -31,7 +32,7 @@ export function shown(path: string): string {
   return sanitizeLine(short);
 }
 
-export const count = (value: number) => value.toLocaleString('en-US');
+export const count = (value: number) => value.toLocaleString(getLanguage());
 
 /** The commander `.option` collector for a repeatable flag. */
 export const repeat = (value: string, list: string[] = []) => [...list, value];
@@ -40,25 +41,27 @@ export const commaList = (value: string) => value.split(',').filter(Boolean);
 
 /** Adds a command with `--json`. */
 export const command = (parent: Command, spec: string, description: string) =>
-  parent.command(spec).description(description).option('--json', 'Print JSON');
+  parent.command(spec).description(description).option('--json', t('Print JSON'));
 
 /** Adds the query flags of docs/cli.md. */
 export const queryFlags = (target: Command) =>
   target
-    .option('--folder <path>', 'Only this folder')
-    .option('--tag <tag>', 'Has this tag. Repeatable', repeat)
-    .option('--not-tag <tag>', 'Lacks this tag. Repeatable', repeat)
-    .option('--mime <type>', 'MIME type, such as image/*')
-    .option('--status <status>', 'new, organized or failed')
-    .option('--sort <key>', 'name, modified, size or relevance')
-    .option('--order <order>', 'asc or desc')
-    .option('--limit <n>', 'At most this many', Number)
-    .option('--offset <n>', 'Skip this many', Number);
+    .option('--folder <path>', t('Only this folder'))
+    .option('--tag <tag>', t('Has this tag. Repeatable'), repeat)
+    .option('--tag-match <mode>', t('Repeated --tag: all (the default) or any'))
+    .option('--not-tag <tag>', t('Lacks this tag. Repeatable'), repeat)
+    .option('--mime <type>', t('MIME type, such as image/*'))
+    .option('--status <status>', t('new, organized or failed'))
+    .option('--sort <key>', t('name, modified, size or relevance'))
+    .option('--order <order>', t('asc or desc'))
+    .option('--limit <n>', t('At most this many'), Number)
+    .option('--offset <n>', t('Skip this many'), Number);
 
 /** The values of `queryFlags`. */
 export interface QueryFlags {
   folder?: string;
   tag?: string[];
+  tagMatch?: FileQuery['tag_match'];
   notTag?: string[];
   mime?: string;
   status?: FileQuery['status'];
@@ -70,10 +73,11 @@ export interface QueryFlags {
 
 /** Turns flags into a `FileQuery`, leaving out what was not given. */
 export function toQuery(flags: QueryFlags): FileQuery {
-  const { folder, tag, notTag, mime, status, sort, order, limit, offset } = flags;
+  const { folder, tag, tagMatch, notTag, mime, status, sort, order, limit, offset } = flags;
   const query: FileQuery = {
     folder: folder === undefined ? undefined : indexedPath(folder),
     tags: tag,
+    tag_match: tagMatch,
     exclude_tags: notTag,
     mime,
     status,
@@ -87,9 +91,12 @@ export function toQuery(flags: QueryFlags): FileQuery {
 
 function progress(job: Job): void {
   if (!process.stderr.isTTY) return;
-  const verb = { scan: 'Scanning', organize: 'Organizing', apply: 'Applying', undo: 'Undoing' }[
-    job.kind
-  ];
+  const verb = {
+    scan: t('Scanning'),
+    organize: t('Organizing'),
+    apply: t('Applying'),
+    undo: t('Undoing'),
+  }[job.kind];
   const end = job.status === 'running' ? '\r' : '\n';
   process.stderr.write(`\x1b[2K${verb} ${count(job.done)}/${count(job.total)}${end}`);
 }
@@ -119,9 +126,9 @@ export async function follow(ctx: Context, job: Job): Promise<Job> {
   const final = await waitForJob(job.id);
   process.off('SIGINT', cancel);
   for (const warning of final.warnings ?? []) note(sanitizeLine(warning));
-  if (final.status === 'failed') throw new UserError(final.error ?? 'The job failed');
+  if (final.status === 'failed') throw new UserError(final.error ?? t('The job failed'));
   if (final.status === 'cancelled') {
-    note('Cancelled.');
+    note(t('Cancelled.'));
     process.exitCode = EXIT_CANCELLED;
   }
   return final;
@@ -134,8 +141,14 @@ export const sum = (tags: Record<string, number>) =>
 /** The middle lines of a plan's report. */
 export function printPlan(plan: Plan): void {
   const { files, added, removed } = plan.summary;
-  out(`Plan ${plan.id}: ${sanitizeLine(plan.title)}`);
-  out(`  ${count(files)} files, ${count(sum(added))} tags added, ${count(sum(removed))} removed`);
+  out(t('Plan {id}: {title}', { id: plan.id, title: sanitizeLine(plan.title) }));
+  out(
+    t('  {files} files, {added} tags added, {removed} removed', {
+      files: count(files),
+      added: count(sum(added)),
+      removed: count(sum(removed)),
+    }),
+  );
 }
 
 /** Applies a plan and reports it. Exit 1 when an op failed. */
@@ -146,23 +159,37 @@ export async function applyAndReport(ctx: Context, id: string, json?: boolean): 
   if (final.status === 'cancelled') return;
   if (json) return;
   out(
-    `Applied ${id}: ${count(plan.summary.files)} files, ${count(sum(plan.summary.added))} tags added.`,
+    t('Applied {id}: {files} files, {added} tags added.', {
+      id,
+      files: count(plan.summary.files),
+      added: count(sum(plan.summary.added)),
+    }),
   );
-  out(`Undo: jevonganize undo ${id}`);
+  out(t('Undo: jevonganize undo {id}', { id }));
 }
 
 /** Lists failed ops on stderr, and sets exit 1. */
 export function reportErrors(plan: Plan): void {
   const errors = Object.entries(plan.errors ?? {});
-  for (const [id, reason] of errors) note(`File ${id}: ${sanitizeLine(reason)}`);
+  for (const [id, reason] of errors)
+    note(t('File {id}: {reason}', { id, reason: sanitizeLine(reason) }));
   if (errors.length > 0 && !process.exitCode) process.exitCode = 1;
 }
 
 /** The cost line of an estimate. */
 export function costLine({ tokens, cost_usd, provider, model }: Estimate): string {
-  const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
-  const cost = cost_usd === null ? 'cost unknown' : `about $${cost_usd.toFixed(2)}`;
-  return `About ${compact.format(tokens)} tokens, ${cost} on ${provider} ${model}`;
+  const compact = new Intl.NumberFormat(getLanguage(), {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  });
+  const cost =
+    cost_usd === null ? t('cost unknown') : t('about ${cost}', { cost: cost_usd.toFixed(2) });
+  return t('About {tokens} tokens, {cost} on {provider} {model}', {
+    tokens: compact.format(tokens),
+    cost,
+    provider,
+    model,
+  });
 }
 
 /** A row's tags, cut for a table. */

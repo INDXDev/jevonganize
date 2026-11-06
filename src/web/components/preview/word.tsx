@@ -1,10 +1,16 @@
+import { t } from '../../i18n/index.ts';
 import { useEffect, useState } from 'react';
 import { fileUrl, useTool } from '../../api.ts';
+import { Frame } from './frame.tsx';
 import type { KindProps } from './index.tsx';
 
-const style = `<style>body{font:13px/1.5 system-ui,sans-serif;color:#ededef;background:#141518;margin:12px}</style>`;
+/** The frame cannot see the app's tokens, so it gets their current values. */
+function frameStyle() {
+  const { color, backgroundColor } = getComputedStyle(document.body);
+  return `<style>body{font:13px/1.5 system-ui,sans-serif;color:${color};background:${backgroundColor};margin:12px}</style>`;
+}
 
-/** `mammoth` output is untrusted, so it renders in a sandboxed frame with no scripts. */
+/** `mammoth` output is untrusted, so it renders in `Frame`. */
 export default function Word({ file, onFail }: KindProps) {
   const [html, setHtml] = useState<string>();
   const { data } = useTool('get_config', {});
@@ -33,11 +39,10 @@ export default function Word({ file, onFail }: KindProps) {
 
   if (html === undefined) return <div className="shimmer size-full bg-surface-2" />;
   return (
-    <iframe
-      sandbox=""
-      title={`Preview of ${file.name}`}
-      srcDoc={style + html}
-      className="size-full bg-surface-1"
+    <Frame
+      title={t('Preview of {name}', { name: file.name })}
+      html={frameStyle() + html}
+      className="bg-surface-1"
     />
   );
 }

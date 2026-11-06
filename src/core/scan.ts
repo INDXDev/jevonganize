@@ -1,51 +1,24 @@
-/** Keeps the index in step with the disk: walk, compare fingerprints, mirror tags. */
+/**
+ * Keeps the index in step with the disk: walk, compare fingerprints, mirror tags. The disk always
+ * wins. A fingerprint is what `lstat` says about a path, so an unchanged one needs no further read.
+ * A row is a file the index knows; `seen` collects rows the walk found, and the rest are gone.
+ *
+ * A scan reads tags and writes only to the index, in batches, as a transaction must not span an
+ * `await`: each batch reads the disk first, then records every observation at once.
+ */
 import { lstat, readdir, realpath, stat } from 'node:fs/promises';
 import type { BigIntStats } from 'node:fs';
-import { dirname, join, parse, relative, resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { setImmediate as yieldToLoop } from 'node:timers/promises';
-import ignore from 'ignore';
 import mime from 'mime';
 import type { Tag } from '../types.ts';
 import type { Config } from './config.ts';
-import { ifExists, paths, UserError } from './config.ts';
+import { ifExists, UserError } from './config.ts';
 import type { Db, FileRecord, Fingerprint, MirrorTag } from './db.ts';
+import { type Excluded, exclusions, secretRoot } from './exclusions.ts';
 import { overwriteDropsTags, readTags } from './tags.ts';
 
-const BATCH = 256;
-
-/**
- * Never read, indexed, tagged or sent, whatever `exclude` says: see docs/security.md. Patterns with
- * an inner `/` need the `**` prefix, or `ignore` anchors them to the root of the path.
- */
-const SECRETS = [
-  '.env',
-  '.env.*',
-  '*.pem',
-  '*.p12',
-  '*.pfx',
-  '.ssh/',
-  'id_rsa*',
-  'id_dsa*',
-  'id_ecdsa*',
-  'id_ed25519*',
-  '.gnupg/',
-  '.aws/',
-  '*.keychain',
-  '*.keychain-db',
-  '**/Library/Keychains/',
-  '*.kdbx',
-  'wallet.dat',
-  '**/Library/Application Support/Google/Chrome/',
-  '**/Library/Application Support/Microsoft Edge/',
-  '**/Library/Application Support/Firefox/',
-  '**/.config/google-chrome/',
-  '**/.config/microsoft-edge/',
-  '**/.mozilla/firefox/',
-  '**/AppData/Local/Google/Chrome/User Data/',
-  '**/AppData/Local/Microsoft/Edge/User Data/',
-  '**/AppData/Roaming/Mozilla/Firefox/',
-  '.jevonganize-probe-*', // left by `supported()` if it dies mid-probe
-];
+const BATCH_SIZE = 256;
 
 /** A running total of what a scan did. */
 export interface ScanResult {
@@ -64,33 +37,6 @@ export interface ScanResult {
   ids: number[];
 }
 
-export type Excluded = (path: string, directory: boolean) => boolean;
-
-const posix = (path: string, directory: boolean) =>
-  path.split(sep).join('/') + (directory ? '/' : '');
-
-/** Builds the exclusion test for a library. Secrets match the whole path, so a root can't hide them. */
-export function exclusions(config: Config, root: string): Excluded {
-  const secrets = ignore().add(SECRETS);
-  const user = ignore().add(config.exclude);
-  // With a home folder as a library, these would index the keys, and the index would chase itself.
-  const own = [paths.configDir(), dirname(paths.database()), dirname(paths.thumbnails())];
-  return (path, directory) => {
-    if (own.some((dir) => path === dir || path.startsWith(dir + sep))) return true;
-    const whole = posix(path.slice(parse(path).root.length), directory);
-    const inRoot = relative(root, path);
-    // A path the matcher cannot judge is not one to read.
-    if (!ignore.isPathValid(whole)) return true;
-    if (secrets.ignores(whole)) return true;
-    return inRoot !== '' && user.ignores(posix(inRoot, directory));
-  };
-}
-
-/** True when a library's real path is itself a secret, whatever link led there. */
-export function secretRoot(config: Config, real: string): boolean {
-  return real !== parse(real).root && exclusions(config, real)(real, true);
-}
-
 /** Yields regular files, one directory at a time. Links and special files are never opened. */
 async function* walk(
   dir: string,
@@ -107,17 +53,17 @@ async function* walk(
     return;
   }
   for (const entry of entries) {
-    const path = join(dir, entry.name);
     // shortcut: a real U+FFFD in a name is skipped too, read names as buffers if that ever matters.
     if (entry.name.includes('�')) {
       result.warnings.push(`Skipped a name that is not valid UTF-8 in ${dir}`);
-    } else if (entry.isDirectory()) {
-      if (excluded(path, true)) result.skipped++;
-      else yield* walk(path, excluded, result, unreadable);
-    } else if (entry.isFile()) {
-      if (excluded(path, false)) result.skipped++;
-      else yield path;
+      continue;
     }
+    const isDirectory = entry.isDirectory();
+    if (!isDirectory && !entry.isFile()) continue;
+    const path = join(dir, entry.name);
+    if (excluded(path, isDirectory)) result.skipped++;
+    else if (isDirectory) yield* walk(path, excluded, result, unreadable);
+    else yield path;
   }
 }
 
@@ -130,12 +76,11 @@ const fingerprint = (path: string, info: BigIntStats): Fingerprint => ({
   ctime_ns: String(info.ctimeNs),
 });
 
-const unchanged = (row: FileRecord, now: Fingerprint) =>
-  row.path === now.path &&
-  row.ino === now.ino &&
-  row.size === now.size &&
-  row.mtime_ns === now.mtime_ns &&
-  row.ctime_ns === now.ctime_ns;
+const sameContent = (row: FileRecord, now: Fingerprint) =>
+  row.ino === now.ino && row.size === now.size && row.mtime_ns === now.mtime_ns;
+
+const sameFingerprint = (row: FileRecord, now: Fingerprint) =>
+  row.path === now.path && sameContent(row, now) && row.ctime_ns === now.ctime_ns;
 
 /** The row this path continues: its own, or that of a file that left its old path. */
 async function priorRow(db: Db, now: Fingerprint): Promise<FileRecord | undefined> {
@@ -167,7 +112,7 @@ async function observe(
     const now = fingerprint(path, info);
     const row = await priorRow(db, now);
     if (row) seen.add(row.id);
-    if (row && unchanged(row, now)) return null;
+    if (row && sameFingerprint(row, now)) return null;
     return { now, row, tags: await readTags(path) };
   } catch (error) {
     // The old fingerprint stays, so the next scan tries again. A failed lstat never reached `seen`.
@@ -180,28 +125,35 @@ async function observe(
 
 /** Handles tags gone from a file, as in docs/tags.md#lost-tags. Returns the new `restore` items. */
 export function recordRemoved(db: Db, id: number, removed: MirrorTag[], replaced: boolean): number {
+  if (!replaced) {
+    for (const { tag, ai } of removed) if (ai) db.rejectTag(id, tag, 'Removed by a person');
+    return 0;
+  }
   let restores = 0;
-  for (const { tag, ai } of removed) {
-    if (replaced) {
-      const item = { file_id: id, kind: 'restore', tag, confidence: null } as const;
-      if (db.addReview({ ...item, reason: 'Missing after the file was replaced' })) restores++;
-    } else if (ai) db.rejectTag(id, tag, 'Removed by a person');
+  for (const { tag } of removed) {
+    const item = { file_id: id, kind: 'restore', tag, confidence: null } as const;
+    if (db.addReview({ ...item, reason: 'Missing after the file was replaced' })) restores++;
   }
   return restores;
 }
 
 /** Writes one observation to the index. Synchronous, so that a batch is one transaction. */
-function record(db: Db, { now, row, tags }: Observation, result: ScanResult, seen: Set<number>) {
+function recordObservation(
+  db: Db,
+  { now, row, tags }: Observation,
+  result: ScanResult,
+  seen: Set<number>,
+) {
   const replaced = row !== undefined && row.ino !== now.ino;
-  const edited =
-    replaced || (row !== undefined && (row.size !== now.size || row.mtime_ns !== now.mtime_ns));
+  const edited = row !== undefined && !sameContent(row, now);
   const moved = row !== undefined && row.path !== now.path;
   if (moved) db.moveFile(row.id, now.path);
   const id = db.upsertFile(now, { edited, mime: mime.getType(now.path) });
   seen.add(id);
 
   const { added, removed } = db.syncFileTags(id, tags);
-  result.restores += recordRemoved(db, id, removed, replaced || (edited && overwriteDropsTags));
+  const tagsWentWithContent = replaced || (edited && overwriteDropsTags);
+  result.restores += recordRemoved(db, id, removed, tagsWentWithContent);
   db.dropRestored(id, tags);
 
   if (!row) result.added++;
@@ -215,7 +167,7 @@ async function scanBatch(db: Db, batch: string[], result: ScanResult, seen: Set<
   const observed = await Promise.all(batch.map((path) => observe(db, path, result, seen)));
   db.transaction(() => {
     for (const observation of observed) {
-      if (observation) record(db, observation, result, seen);
+      if (observation) recordObservation(db, observation, result, seen);
     }
   });
   await yieldToLoop(); // tag reads and SQLite are synchronous, so nothing else ran until now
@@ -232,6 +184,57 @@ const emptyResult = (): ScanResult => ({
   warnings: [],
   ids: [],
 });
+
+/** What walking a library found, for deciding which rows are gone. */
+interface Walked {
+  result: ScanResult;
+  seen: Set<number>;
+  unreadable: string[];
+}
+
+/** Walks a library and indexes what it finds, a batch at a time. */
+async function walkAndIndex(
+  db: Db,
+  base: string,
+  excluded: Excluded,
+  onProgress?: (progress: { done: number; current: string }) => void,
+): Promise<Walked> {
+  const result = emptyResult();
+  const seen = new Set<number>();
+  const unreadable: string[] = [];
+
+  let batch: string[] = [];
+  const flush = async () => {
+    await scanBatch(db, batch, result, seen);
+    const current = batch.at(-1);
+    if (current !== undefined) onProgress?.({ done: result.files, current });
+    batch = [];
+  };
+  for await (const path of walk(base, excluded, result, unreadable)) {
+    batch.push(path);
+    if (batch.length >= BATCH_SIZE) await flush();
+  }
+  await flush();
+  return { result, seen, unreadable };
+}
+
+/** Deletes the rows of files the walk did not find. */
+function dropMissingRows(
+  db: Db,
+  indexed: { id: number; path: string }[],
+  { result, seen, unreadable }: Walked,
+) {
+  // What could not be listed may still exist, and its row holds history.
+  const mayExist = (path: string) => unreadable.some((dir) => path.startsWith(dir + sep));
+  db.transaction(() => {
+    for (const { id, path } of indexed) {
+      if (seen.has(id) || mayExist(path)) continue;
+      db.deleteFile(id);
+      result.removed++;
+      result.ids.push(id);
+    }
+  });
+}
 
 /**
  * Brings the index up to date with one library, and repairs any drift: the disk always wins. Never
@@ -252,22 +255,8 @@ export async function scanLibrary(
   }
   // A stored root can be, or become, a link to a secret folder.
   const excluded = secretRoot(config, await realpath(base)) ? () => true : exclusions(config, base);
-  const result = emptyResult();
-  const seen = new Set<number>();
-  const unreadable: string[] = [];
-
-  let batch: string[] = [];
-  const flush = async () => {
-    await scanBatch(db, batch, result, seen);
-    const current = batch.at(-1);
-    if (current !== undefined) onProgress?.({ done: result.files, current });
-    batch = [];
-  };
-  for await (const path of walk(base, excluded, result, unreadable)) {
-    batch.push(path);
-    if (batch.length >= BATCH) await flush();
-  }
-  await flush();
+  const walked = await walkAndIndex(db, base, excluded, onProgress);
+  const { result } = walked;
 
   const indexed = db.filesUnder(base);
   // An empty mount point looks like every file deleted, and the rows hold provenance and history.
@@ -278,17 +267,24 @@ export async function scanLibrary(
     );
     return result;
   }
-  db.transaction(() => {
-    for (const { id, path } of indexed) {
-      // What could not be listed may still exist, and its row holds history.
-      if (seen.has(id) || unreadable.some((dir) => path.startsWith(dir + sep))) continue;
-      db.deleteFile(id);
-      result.removed++;
-      result.ids.push(id);
-    }
-  });
+  dropMissingRows(db, indexed, walked);
   db.markScanned(base);
   return result;
+}
+
+/** Sorts watch events by what is on disk now, leaving out what is excluded. */
+async function sortCandidates(candidates: string[], excluded: Excluded) {
+  const gone: string[] = [];
+  const files: string[] = [];
+  let hasDirectory = false;
+  for (const path of candidates) {
+    const info = await ifExists(lstat(path));
+    if (excluded(path, info?.isDirectory() ?? false)) continue;
+    if (!info) gone.push(path);
+    else if (info.isDirectory()) hasDirectory = true;
+    else if (info.isFile()) files.push(path);
+  }
+  return { gone, files, hasDirectory };
 }
 
 /**
@@ -304,21 +300,13 @@ export async function scanPaths(
   const base = resolve(root);
   const excluded = exclusions(config, base);
   const result = emptyResult();
-  const gone: string[] = [];
-  const files: string[] = [];
-  let needsWalk = false;
-  for (const path of candidates) {
-    const info = await ifExists(lstat(path));
-    if (excluded(path, info?.isDirectory() ?? false)) continue;
-    if (!info) gone.push(path);
-    else if (info.isDirectory()) needsWalk = true;
-    else if (info.isFile()) files.push(path);
-  }
-  for (let start = 0; start < files.length; start += BATCH) {
-    await scanBatch(db, files.slice(start, start + BATCH), result, new Set());
+  const { gone, files, hasDirectory } = await sortCandidates(candidates, excluded);
+  for (let start = 0; start < files.length; start += BATCH_SIZE) {
+    await scanBatch(db, files.slice(start, start + BATCH_SIZE), result, new Set());
   }
   // After the files, so a rename seen whole in this batch has already moved its row.
-  needsWalk ||= gone.some((path) => db.fileByPath(path) || db.filesUnder(path).length > 0);
+  const isIndexed = (path: string) => db.fileByPath(path) || db.filesUnder(path).length > 0;
+  const needsWalk = hasDirectory || gone.some(isIndexed);
   return { ids: result.ids, needsWalk, warnings: result.warnings };
 }
 

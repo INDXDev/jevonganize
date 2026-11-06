@@ -24,6 +24,7 @@ electronLanguages:
   - en
   - en-US
   - ja
+  - zh-CN
 electronFuses:
   runAsNode: false
   enableNodeCliInspectArguments: false

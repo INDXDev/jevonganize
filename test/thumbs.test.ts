@@ -32,7 +32,17 @@ afterAll(async () => {
   await rm(home, { recursive: true, force: true });
 });
 
-describe('thumbnail', () => {
+async function pageOf(name: string, text: string) {
+  const path = join(home, name);
+  await writeFile(path, text);
+  return sharp((await thumbnail(row(path, `f1:cc${name}`), 256))!)
+    .raw()
+    .toBuffer();
+}
+
+const slow = { timeout: 30_000 };
+
+describe('thumbnail cache', slow, () => {
   it('makes a webp at a content-addressed path, and reuses it', async () => {
     const out = await thumbnail(row(fixture('photo.jpg'), 'f1:abcdef'), 256);
     expect(out).toBe(join(paths.thumbnails(), 'ab', 'abcdef-256.webp'));
@@ -55,7 +65,9 @@ describe('thumbnail', () => {
     expect((await sharp(second!).metadata()).width).toBe(1024);
     expect(first!.slice(-70, -9)).not.toBe(second!.slice(-71, -10));
   });
+});
 
+describe('thumbnail drawing', slow, () => {
   it('renders the first page of a PDF, even a scanned one', async () => {
     for (const [name, hash] of [
       ['report.pdf', 'f1:11'],
@@ -71,6 +83,39 @@ describe('thumbnail', () => {
     expect(await thumbnail(row(fixture('logo.svg'), 'f1:44'), 256)).toMatch(/webp$/);
   });
 
+  it.each([
+    'page.html',
+    'table.csv',
+    'readme.md',
+    'mail.eml',
+    'plan.docx',
+    'budget.xlsx',
+    'note.rtf',
+  ])('draws %s as a page of its text', async (name) => {
+    const out = await thumbnail(row(fixture(name), `f1:a${name.length}${name[0]}`), 256);
+    const { data, info } = await sharp(out!).raw().toBuffer({ resolveWithObject: true });
+    expect(info.height).toBeGreaterThan(info.width);
+    expect(data.some((value) => value < 128)).toBe(true); // ink on the paper, not a blank sheet
+  });
+
+  // Linux CI has no Japanese font, and there every letter is the same box.
+  it.runIf(process.platform === 'darwin')('draws Japanese with a real font', async () => {
+    const [one, other] = [await pageOf('a.txt', 'あいう'), await pageOf('b.txt', '東西南')];
+    expect(one.equals(other)).toBe(false); // a missing font draws every letter the same
+  });
+
+  it('draws a presentation as a slide', async () => {
+    const out = await thumbnail(row(fixture('converted.pptx'), 'f1:b1'), 256);
+    const { width, height } = await sharp(out!).metadata();
+    expect(width).toBeGreaterThan(height);
+  });
+
+  it('leaves video to the browser', async () => {
+    expect(await thumbnail(row(fixture('clip.mp4'), 'f1:b2'), 256)).toBeNull();
+  });
+});
+
+describe('thumbnail failures', slow, () => {
   it('leaves a .fail marker for a bad file, and does not parse it again', async () => {
     const path = join(home, 'bad.jpg');
     await writeFile(path, await readFile(fixture('truncated.jpg')));
@@ -83,7 +128,8 @@ describe('thumbnail', () => {
   });
 
   it('fails what it cannot draw, and still serves good files after', async () => {
-    expect(await thumbnail(row(fixture('table.csv'), 'f1:66'), 256)).toBeNull();
+    expect(await thumbnail(row(fixture('noise.bin'), 'f1:66'), 256)).toBeNull();
+    expect(await thumbnail(row(fixture('archive.zip'), 'f1:67'), 256)).toBeNull();
     expect(await thumbnail(row(fixture('locked.pdf'), 'f1:77'), 256)).toBeNull();
     expect(await thumbnail(row(fixture('photo.jpg'), 'f1:88'), 256)).toMatch(/webp$/);
   });

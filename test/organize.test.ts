@@ -1,129 +1,28 @@
-import { mkdir, open, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import {
+  answering,
+  apiError,
+  at,
+  ctx,
+  type DoDecide,
+  events,
+  FACETS,
+  fileId,
+  mock,
+  organize,
+  scan,
+  setupOrganize,
+} from './organize-helpers.ts';
+import { rm, writeFile } from 'node:fs/promises';
 import { setImmediate as nextTick } from 'node:timers/promises';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
-import { APICallError } from 'ai';
-import { Experimental_DecisionMockModelV4 as MockDecisionModel } from 'ai/test';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type * as Providers from '../src/ai/providers.ts';
-import type * as Extract from '../src/extract/index.ts';
+import { describe, expect, test, vi } from 'vitest';
 import { UserError } from '../src/core/config.ts';
 import { readTags, writeTags } from '../src/core/tags.ts';
-import { callTool, type Context, openContext, waitForJob } from '../src/core/tools.ts';
-import type { Job, ServerEvent } from '../src/types.ts';
-import { useTempHome } from './helpers.ts';
+import { callTool, waitForJob } from '../src/core/tools.ts';
+import type { Job } from '../src/types.ts';
 
-type DoDecide = MockDecisionModel['doDecide'];
-type Reply = Awaited<ReturnType<DoDecide>>['answers'];
-
-const mock = vi.hoisted(() => ({
-  doDecide: undefined as unknown,
-  native: true,
-  noKey: false,
-  profiles: [] as (string | undefined)[],
-  states: [] as WeakRef<object>[],
-}));
-
-vi.mock('../src/extract/index.ts', async (original) => {
-  const real = await original<typeof Extract>();
-  return {
-    ...real,
-    extractFile: async (...args: Parameters<typeof real.extractFile>) => {
-      const state = await real.extractFile(...args);
-      mock.states.push(new WeakRef(state));
-      return state;
-    },
-  };
-});
-
-vi.mock('../src/ai/providers.ts', async (original) => {
-  const real = await original<typeof Providers>();
-  return {
-    ...real,
-    resolveModel: async (_config: unknown, profile?: string) => {
-      if (mock.noKey) throw new (await import('../src/core/config.ts')).UserError('no key');
-      mock.profiles.push(profile);
-      const caps = { ...real.capabilities('openai', 'gpt-6-luna'), native: mock.native };
-      const model = new MockDecisionModel({ doDecide: mock.doDecide as DoDecide });
-      return { model, provider: 'openai', modelId: `m-${profile ?? 'default'}`, caps };
-    },
-  };
-});
-
-vi.setConfig({ testTimeout: 30_000 }); // real workers, which a busy machine can hold up
-
-const home = useTempHome();
-let ctx: Context;
-let root: string;
-let events: ServerEvent[];
-const at = (name: string) => join(root, name);
-
-/** A complete distribution, as the SDK requires. */
-function spread(criteria: object, label: string, p: number) {
-  const rest = Object.keys(criteria).filter((key) => key !== label);
-  return Object.fromEntries([
-    [label, p],
-    ...rest.map((key) => [key, (1 - p) / rest.length] as const),
-  ]);
-}
-
-/** Answers `doc-type` with the given label and confidence, and every flag with `flag`. */
-function answering(label = 'invoice', p = 0.99, flag = 0.01) {
-  return vi.fn<DoDecide>(async ({ questions }) => {
-    const answers: Reply = {};
-    for (const [id, question] of Object.entries(questions)) {
-      answers[id] =
-        question.type === 'choice'
-          ? { type: 'choice', choice: label, probabilities: spread(question.criteria, label, p) }
-          : question.type === 'boolean'
-            ? { type: 'boolean', probability: flag }
-            : { type: 'score', score: 0, probabilities: { 0: 0.99 } };
-    }
-    return { answers, usage: { inputTokens: 100 }, warnings: [] };
-  });
-}
-
-const answeredAll = (questions: Record<string, { type: string }>): Reply =>
-  Object.fromEntries(
-    Object.keys(questions).map((id) => [id, { type: 'boolean' as const, probability: 0.5 }]),
-  );
-
-const apiError = (statusCode: number) =>
-  new APICallError({
-    message: 'no',
-    url: 'u',
-    requestBodyValues: {},
-    statusCode,
-    isRetryable: false,
-  });
-
-const FACETS = ['doc-type', 'has-signature'];
-
-async function scan() {
-  return waitForJob((await callTool('scan', { path: root }, ctx)).id);
-}
-
-async function organize(query = {}, facets: string[] = FACETS): Promise<Job> {
-  return waitForJob((await callTool('organize', { query, facets }, ctx)).id);
-}
-
-const fileId = (name: string) => ctx.db.fileByPath(at(name))!.id;
-
-beforeEach(async () => {
-  root = join(home(), 'library');
-  await mkdir(root);
-  events = [];
-  ctx = await openContext('ui', (event) => events.push(event));
-  await callTool('add_library', { path: root }, ctx);
-  mock.doDecide = answering();
-  mock.native = true;
-  mock.noKey = false;
-  mock.profiles = [];
-  mock.states = [];
-});
-
-afterEach(() => ctx.db.close());
+setupOrganize();
 
 test('end to end: scan, organize, apply, read from disk, undo', async () => {
   const path = at('invoice.txt');
@@ -346,25 +245,6 @@ describe('job control', () => {
   });
 });
 
-/** Tags a file through the whole flow, then changes it, so the next run asks again. */
-/** Saves over the bytes of an open file. `writeFile` would delete the tag stream on Windows. */
-async function saveInPlace(name: string, text: string) {
-  const file = await open(at(name), 'r+');
-  await file.truncate(0);
-  await file.write(text, 0);
-  await file.close();
-}
-
-async function organizedThenEdited(tags: string[] = []) {
-  await writeFile(at('a.txt'), 'first');
-  if (tags.length > 0) await writeTags(at('a.txt'), tags);
-  await scan();
-  const { plan_id: id } = await organize();
-  await waitForJob((await callTool('apply_plan', { id: id! }, ctx)).id);
-  await saveInPlace('a.txt', 'second');
-  await scan();
-}
-
 describe('memory', () => {
   test('a finished file’s state is not kept until the run ends', async () => {
     setFlagsFromString('--expose-gc');
@@ -415,88 +295,5 @@ describe('estimate', () => {
     await callTool('estimate', { query: {}, facets: FACETS }, ctx);
     finished = true;
     expect(seen.at(-1)).toBeGreaterThan(seen[0]!);
-  });
-});
-
-describe('provenance', () => {
-  test('a refused facet keeps its tags', async () => {
-    await organizedThenEdited();
-    const refusing = vi.fn<DoDecide>(async ({ questions }) => ({
-      answers: Object.fromEntries(
-        Object.keys(questions).map((id) => [id, { type: 'refusal' as const }]),
-      ),
-      usage: { inputTokens: 1 },
-      warnings: [],
-    }));
-    mock.doDecide = refusing;
-    const job = await organize();
-    const plan = await callTool('get_plan', { id: job.plan_id! }, ctx);
-    expect(plan.summary.removed).toEqual({});
-  });
-
-  test('a facet the model answered with `other` still drops the tag it no longer supports', async () => {
-    await organizedThenEdited();
-    mock.doDecide = answering('other');
-    const job = await organize();
-    const plan = await callTool('get_plan', { id: job.plan_id! }, ctx);
-    expect(plan.summary.removed).toEqual({ 'doc-type:invoice': 1 });
-  });
-
-  test('a tag held back for review counts towards max_tags', async () => {
-    await organizedThenEdited(['mine']);
-    ctx.config.max_tags = 2;
-    mock.doDecide = answering('invoice', 0.6, 0.99); // doc-type:invoice to review, flag to apply
-    const job = await organize({}, ['doc-type', 'needs-action']);
-    const plan = await callTool('get_plan', { id: job.plan_id! }, ctx);
-    expect(plan.summary.added).toEqual({});
-    expect(plan.summary.removed).toEqual({});
-  });
-
-  test('the cost of a refused call stays counted when the file then fails', async () => {
-    await writeFile(at('a.txt'), 'text');
-    await scan();
-    let calls = 0;
-    mock.doDecide = vi.fn<DoDecide>(async ({ questions }) => {
-      if (++calls > 1) throw apiError(400);
-      const [first = ''] = Object.keys(questions);
-      return {
-        answers: { ...answeredAll(questions), [first]: { type: 'refusal' as const } },
-        usage: { inputTokens: 100 },
-        warnings: [],
-      };
-    });
-    const job = await organize({}, ['doc-type', 'needs-action']);
-    expect(job).toMatchObject({ failed: 1, tokens: 100 });
-  });
-
-  test('a new answer replaces a tag the app wrote, in a plan, and never a person’s', async () => {
-    await writeFile(at('a.txt'), 'first');
-    await scan();
-    const first = await organize();
-    await waitForJob((await callTool('apply_plan', { id: first.plan_id! }, ctx)).id);
-
-    await saveInPlace('a.txt', 'second version');
-    await scan();
-    mock.doDecide = answering('receipt');
-    const second = await organize();
-    const plan = await callTool('get_plan', { id: second.plan_id! }, ctx);
-    expect(plan.ops).toMatchObject([{ add: ['doc-type:receipt'], remove: ['doc-type:invoice'] }]);
-  });
-
-  test('a person’s tag in a single-valued facet blocks the answer', async () => {
-    await writeFile(at('a.txt'), 'x');
-    await writeTags(at('a.txt'), ['doc-type:contract']);
-    await scan();
-    const job = await organize();
-    expect((await callTool('get_plan', { id: job.plan_id! }, ctx)).ops).toEqual([]);
-  });
-
-  test('an unchanged rerun proposes nothing', async () => {
-    await writeFile(at('a.txt'), 'x');
-    await scan();
-    const first = await organize();
-    await waitForJob((await callTool('apply_plan', { id: first.plan_id! }, ctx)).id);
-    const second = await organize();
-    expect((await callTool('get_plan', { id: second.plan_id! }, ctx)).ops).toEqual([]);
   });
 });

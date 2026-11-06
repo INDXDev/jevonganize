@@ -50,6 +50,20 @@ function wireQuestion(question: CallOptions['questions'][string]): unknown {
   return { type: 'noul', instructions, criteria: both };
 }
 
+/** The error for a refused request. A 402 from the in-flight budget is marked as worth a retry. */
+async function requestError(response: Response, url: string): Promise<APICallError> {
+  const responseBody = await response.text();
+  const transient = responseBody.includes('openrouter_in_flight_budget');
+  return new APICallError({
+    message: `OpenRouter returned HTTP ${response.status}`,
+    url,
+    requestBodyValues: {}, // the real body holds file content, which must not reach a log
+    statusCode: response.status,
+    responseBody,
+    ...(transient && { isRetryable: true }),
+  });
+}
+
 /** Builds the model. A 402 from the in-flight budget is transient, so the SDK retries it. */
 export function openRouterModel(
   apiKey: string,
@@ -79,18 +93,7 @@ export function openRouterModel(
         }),
         signal: abortSignal,
       });
-      if (!response.ok) {
-        const responseBody = await response.text();
-        const transient = responseBody.includes('openrouter_in_flight_budget');
-        throw new APICallError({
-          message: `OpenRouter returned HTTP ${response.status}`,
-          url,
-          requestBodyValues: {}, // the real body holds file content, which must not reach a log
-          statusCode: response.status,
-          responseBody,
-          ...(transient && { isRetryable: true }),
-        });
-      }
+      if (!response.ok) throw await requestError(response, url);
       const body = responseSchema.parse(await response.json());
       return {
         answers: Object.fromEntries(

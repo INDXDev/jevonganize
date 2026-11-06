@@ -10,19 +10,30 @@ import { z } from 'zod';
 /** An error the user can fix. Anything else is reported as a bug. */
 export class UserError extends Error {}
 
-const dirs = envPaths('jevonganize', { suffix: '' });
+/** The text of anything thrown. */
+export const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const defaultDirs = envPaths('jevonganize', { suffix: '' });
 
 /** Where everything lives. Tests point these elsewhere with `JEVONGANIZE_HOME`. */
 export const paths = {
-  configDir: () => home('config') ?? dirs.config,
+  configDir: () => homeOverride('config') ?? defaultDirs.config,
   configFile: () => join(paths.configDir(), 'config.toml'),
   credentialsFile: () => join(paths.configDir(), 'credentials.toml'),
   facetsDir: () => join(paths.configDir(), 'facets'),
-  database: () => join(home('data') ?? dirs.data, 'index.db'),
-  thumbnails: () => join(home('cache') ?? dirs.cache, 'thumbnails'),
+  database: () => join(homeOverride('data') ?? defaultDirs.data, 'index.db'),
+  thumbnails: () => join(homeOverride('cache') ?? defaultDirs.cache, 'thumbnails'),
 };
 
-function home(kind: string): string | undefined {
+/** The files `config path` prints and Settings shows. */
+export const locations = () => ({
+  config: paths.configFile(),
+  data: paths.database(),
+  cache: paths.thumbnails(),
+});
+
+function homeOverride(kind: string): string | undefined {
   const root = process.env.JEVONGANIZE_HOME;
   return root ? join(root, kind) : undefined;
 }
@@ -40,14 +51,14 @@ export function indexedPath(path: string): string {
   }
 }
 
-const provider = z.strictObject({
+const providerSchema = z.strictObject({
   name: z.enum(['openai', 'typesafe', 'gateway', 'cloudflare', 'openrouter', 'compatible', 'chat']),
   model: z.string().optional(),
   base_url: z.url().optional(),
   account_id: z.string().optional(),
 });
 
-const budget = z.strictObject({
+const budgetSchema = z.strictObject({
   text_chars: z
     .int()
     .positive()
@@ -82,33 +93,123 @@ const budget = z.strictObject({
   timeout_seconds: z.number().positive().default(30).describe('Time limit per file'),
 });
 
-const step = (match: string, ...use: string[]) => ({ match, use });
+const tagColorSchema = z.enum([
+  'auto',
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'teal',
+  'blue',
+  'indigo',
+  'purple',
+  'pink',
+  'gray',
+]);
+
+const viewSchema = z.strictObject({
+  show_dotfiles: z
+    .boolean()
+    .default(false)
+    .describe('Show files and folders whose names start with a dot'),
+  include_subfolders: z
+    .boolean()
+    .default(true)
+    .describe('Show everything under a folder. Off shows only what sits directly in it'),
+  show_extensions: z.boolean().default(true).describe('Show file name extensions'),
+  thumbnail_size: z
+    .int()
+    .min(64)
+    .max(512)
+    .default(160)
+    .describe('Width of a grid tile in pixels, when grid_columns is 0'),
+  grid_columns: z
+    .int()
+    .min(0)
+    .max(12)
+    .default(0)
+    .describe('Tiles per row. 0 fits as many as thumbnail_size allows'),
+  grid_spacing: z.int().min(0).max(48).default(10).describe('Space between tiles in pixels'),
+  thumbnail_fit: z
+    .enum(['cover', 'contain'])
+    .default('cover')
+    .describe('Cover fills the tile and crops. Contain shows the whole thumbnail'),
+  grid_info: z
+    .enum(['tags', 'kind', 'size', 'modified', 'none'])
+    .default('tags')
+    .describe('The line under a file name in the grid'),
+  text_size: z.int().min(10).max(20).default(12).describe('File name size in pixels'),
+  list_columns: z
+    .array(z.enum(['tags', 'kind', 'size', 'modified', 'path']))
+    .default(['tags', 'size', 'modified'])
+    .describe('Columns of the list, after the name'),
+  list_thumbnails: z.boolean().default(false).describe('Show thumbnails in the list, not icons'),
+});
+
+const facetsSchema = z.strictObject({
+  enabled: z.array(z.string()).default(['core', 'time', 'sensitivity', 'media']),
+  disabled: z.array(z.string()).default([]),
+});
+
+const thresholdsSchema = z.strictObject({
+  apply: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.85)
+    .describe('Confidence at or above this joins the plan'),
+  review: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.5)
+    .describe('Confidence at or above this goes to review. Lower is dropped'),
+  estimated_to_review: z
+    .boolean()
+    .default(true)
+    .describe('Answers without native probabilities never apply on their own'),
+});
+
+const watchSchema = z.strictObject({
+  enabled: z.boolean().default(true),
+  walk_minutes: z
+    .number()
+    .positive()
+    .default(30)
+    .describe('Minutes between full checks, which catch missed events'),
+});
+
+const pipelineStep = (match: string, ...use: string[]) => ({ match, use });
 
 /** First match wins. Documented in docs/pipeline.md, which must stay in step with this. */
 const DEFAULT_PIPELINE = [
-  step('application/pdf', 'pdf', 'pdf-render'),
-  step('image/hei*', 'heic', 'exif'),
-  step('image/svg+xml', 'text', 'image'),
-  step('image/*', 'image', 'exif', 'screenshot', 'quicklook'),
-  step('audio/*', 'media'),
-  step('video/*', 'media', 'ffmpeg-frames', 'quicklook'),
-  step('message/rfc822', 'eml'),
-  step('application/vnd.ms-outlook', 'msg'),
-  step('application/zip', 'zip'),
-  step('application/vnd.openxmlformats-*', 'office', 'quicklook'),
-  step('application/vnd.oasis.*', 'office', 'quicklook'),
-  step('application/rtf', 'office', 'quicklook'),
-  step('application/epub+zip', 'office', 'quicklook'),
-  step('text/html', 'office', 'text'),
-  step('application/msword', 'libreoffice', 'quicklook'),
-  step('application/vnd.ms-excel', 'libreoffice', 'quicklook'),
-  step('application/vnd.ms-powerpoint', 'libreoffice', 'quicklook'),
-  step('text/*', 'text'),
-  step('*', 'text', 'quicklook'),
+  pipelineStep('application/pdf', 'pdf', 'pdf-render'),
+  pipelineStep('image/hei*', 'heic', 'exif'),
+  pipelineStep('image/svg+xml', 'text', 'image'),
+  pipelineStep('image/*', 'image', 'exif', 'screenshot'),
+  pipelineStep('audio/*', 'media'),
+  pipelineStep('video/*', 'media', 'ffmpeg-frames'),
+  pipelineStep('message/rfc822', 'eml'),
+  pipelineStep('application/vnd.ms-outlook', 'msg'),
+  pipelineStep('application/zip', 'zip'),
+  pipelineStep('application/vnd.openxmlformats-*', 'office'),
+  pipelineStep('application/vnd.oasis.*', 'office'),
+  pipelineStep('application/rtf', 'office'),
+  pipelineStep('application/epub+zip', 'office'),
+  pipelineStep('text/html', 'office', 'text'),
+  pipelineStep('application/msword', 'libreoffice'),
+  pipelineStep('application/vnd.ms-excel', 'libreoffice'),
+  pipelineStep('application/vnd.ms-powerpoint', 'libreoffice'),
+  pipelineStep('text/*', 'text'),
+  pipelineStep('*', 'text'),
 ];
 
 /** The whole config file. The settings form is generated from this schema's JSON Schema. */
 export const configSchema = z.strictObject({
+  language: z
+    .enum(['system', 'en', 'ja', 'zh-CN'])
+    .default('system')
+    .describe('Interface language: system default, English, Japanese or Simplified Chinese'),
   port: z
     .int()
     .min(1024)
@@ -135,53 +236,27 @@ export const configSchema = z.strictObject({
     .boolean()
     .default(true)
     .describe('Off keeps every image on this machine, including rendered PDF pages'),
-  provider: provider.default({ name: 'openai', model: 'gpt-6-luna' }),
-  profiles: z.record(z.string(), provider).default({}),
-  chat: provider.default({ name: 'openai', model: 'gpt-6-luna' }),
-  facets: z
-    .strictObject({
-      enabled: z.array(z.string()).default(['core', 'time', 'sensitivity', 'media']),
-      disabled: z.array(z.string()).default([]),
-    })
-    .prefault({}),
-  thresholds: z
-    .strictObject({
-      apply: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(0.85)
-        .describe('Confidence at or above this joins the plan'),
-      review: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(0.5)
-        .describe('Confidence at or above this goes to review. Lower is dropped'),
-      estimated_to_review: z
-        .boolean()
-        .default(true)
-        .describe('Answers without native probabilities never apply on their own'),
-    })
-    .prefault({}),
-  budget: budget.prefault({}),
+  tag_colors: z
+    .record(z.string(), tagColorSchema)
+    .default({})
+    .describe('Colours by tag or by facet. Anything not named here gets its colour from its facet'),
+  view: viewSchema.prefault({}),
+  provider: providerSchema.default({ name: 'openai', model: 'gpt-6-luna' }),
+  profiles: z.record(z.string(), providerSchema).default({}),
+  chat: providerSchema.default({ name: 'openai', model: 'gpt-6-luna' }),
+  facets: facetsSchema.prefault({}),
+  thresholds: thresholdsSchema.prefault({}),
+  budget: budgetSchema.prefault({}),
   pipeline: z
     .array(z.strictObject({ match: z.string(), use: z.array(z.string()).min(1) }))
     .default(DEFAULT_PIPELINE),
-  watch: z
-    .strictObject({
-      enabled: z.boolean().default(true),
-      walk_minutes: z
-        .number()
-        .positive()
-        .default(30)
-        .describe('Minutes between full checks, which catch missed events'),
-    })
-    .prefault({}),
+  watch: watchSchema.prefault({}),
 });
 
 export type Config = z.infer<typeof configSchema>;
 export type Budget = Config['budget'];
+export type TagColor = z.infer<typeof tagColorSchema>;
+export type ViewOptions = Config['view'];
 
 /** True for a TOML table or any other plain object, but not for an array. */
 export function isTable(value: unknown): value is Record<string, unknown> {
@@ -198,6 +273,17 @@ export async function ifExists<T>(operation: Promise<T>): Promise<T | undefined>
   }
 }
 
+/** Creates a file and flushes it to disk. The `wx` flag refuses anything already there. */
+async function writeAndSync(file: string, data: string, mode: number): Promise<void> {
+  const handle = await open(file, 'wx', mode);
+  try {
+    await handle.writeFile(data);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * Replaces a file in one step, so readers never see a partial write and a planted symlink is
  * replaced rather than followed. Keeps the existing mode unless `mode` is given.
@@ -207,13 +293,7 @@ export async function writeFileAtomic(file: string, data: string, mode?: number)
   const current = await ifExists(stat(file));
   const temp = `${file}.${randomUUID()}.tmp`;
   try {
-    const handle = await open(temp, 'wx', mode ?? current?.mode ?? 0o644);
-    try {
-      await handle.writeFile(data);
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
+    await writeAndSync(temp, data, mode ?? current?.mode ?? 0o644);
     if (mode !== undefined) await chmod(temp, mode); // the umask may have narrowed it
     await rename(temp, file);
   } catch (error) {
@@ -239,15 +319,17 @@ export function parseToml(text: string, file: string): Record<string, unknown> {
   }
 }
 
+/** One validation issue as text, by key path. An unknown-keys issue gives a line per key. */
+function issueProblems(issue: z.core.$ZodIssue): string[] {
+  if (issue.code !== 'unrecognized_keys') return [`${issue.path.join('.')}: ${issue.message}`];
+  return issue.keys.map((key) => `${[...issue.path, key].join('.')}: unknown key`);
+}
+
 /** Validates a value, reporting every problem by key path in one `UserError`. */
 export function parseWith<T extends z.ZodType>(schema: T, value: unknown, source: string) {
   const result = schema.safeParse(value);
   if (result.success) return result.data;
-  const problems = result.error.issues.flatMap((issue) =>
-    issue.code === 'unrecognized_keys'
-      ? issue.keys.map((key) => `${[...issue.path, key].join('.')}: unknown key`)
-      : `${issue.path.join('.')}: ${issue.message}`,
-  );
+  const problems = result.error.issues.flatMap(issueProblems);
   throw new UserError(`${source}: ${problems.join('; ')}`);
 }
 
@@ -264,7 +346,7 @@ export function mergeTables(
   return merged;
 }
 
-async function readLayer(): Promise<Record<string, unknown>> {
+async function readConfigFile(): Promise<Record<string, unknown>> {
   const file = paths.configFile();
   const text = await ifExists(readRegularFile(file));
   return text === undefined ? {} : parseToml(text, file);
@@ -272,12 +354,12 @@ async function readLayer(): Promise<Record<string, unknown>> {
 
 /** Loads the config. A missing file gives the defaults. */
 export async function loadConfig(): Promise<Config> {
-  return parseWith(configSchema, await readLayer(), paths.configFile());
+  return parseWith(configSchema, await readConfigFile(), paths.configFile());
 }
 
 /** Merges a partial config into the file, keeping only what the user set. */
 export async function saveConfig(change: Record<string, unknown>): Promise<Config> {
-  const merged = mergeTables(await readLayer(), change);
+  const merged = mergeTables(await readConfigFile(), change);
   const config = parseWith(configSchema, merged, 'config');
   await writeFileAtomic(paths.configFile(), stringify(merged));
   return config;

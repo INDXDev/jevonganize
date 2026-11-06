@@ -1,6 +1,9 @@
+import { t } from '../i18n/index.ts';
 import { Ban, X } from 'lucide-react';
 import type { MouseEvent, ReactNode } from 'react';
-import { cn } from '../lib.ts';
+import { useTagColors } from '../api.ts';
+import { cn, formatCount } from '../lib.ts';
+import { tagColor } from '../tag-colors.ts';
 
 type Props = {
   tag: string;
@@ -22,40 +25,69 @@ const split = (tag: string) => {
   return at < 0 ? ['', tag] : [tag.slice(0, at + 1), tag.slice(at + 1)];
 };
 
+type RowProps = Pick<Props, 'tag' | 'onClick' | 'negated'> & {
+  label: string;
+  hue: string;
+  checked: boolean;
+  meta: ReactNode;
+};
+
+function SidebarRow({ tag, label, hue, checked, meta, onClick, negated }: RowProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={checked || negated}
+      title={t('{tag} (Alt+click to exclude)', { tag })}
+      className={cn(
+        'flex h-dense w-full items-center gap-2 rounded-sm px-2 text-left text-sm text-muted-foreground hover:bg-surface-2 hover:text-foreground',
+        checked && 'bg-soft text-foreground',
+        negated && 'text-foreground line-through',
+      )}
+    >
+      <span aria-hidden data-tag={hue} className="tag-dot size-2 shrink-0 rounded-full" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {meta}
+    </button>
+  );
+}
+
+function RemoveButton({ tag, onRemove }: { tag: string; onRemove: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={t('Remove {name}', { name: tag })}
+      onClick={onRemove}
+      className="grid h-full w-4 shrink-0 place-items-center rounded-r-sm hover:bg-surface-3 hover:text-foreground"
+    >
+      <X className="size-3" />
+    </button>
+  );
+}
+
 /** The only way to show a tag. Text goes through React, so a hostile tag stays text. */
 export function TagChip(props: Props) {
   const { tag, count, confidence, onRemove, onClick, negated, sign, row } = props;
   const [facet, label] = split(tag) as [string, string];
+  const hue = tagColor(tag, useTagColors());
   const Body = onClick ? 'button' : 'span';
   const meta: ReactNode = count !== undefined && (
-    <span className="font-mono text-xs text-subtle tabular-nums">
-      {count.toLocaleString('en-US')}
+    <span className="font-mono text-xs text-muted-foreground tabular-nums">
+      {formatCount(count)}
     </span>
   );
 
-  if (row)
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={row.checked || negated}
-        title={`${tag} (Alt+click to exclude)`}
-        className={cn(
-          'flex h-dense w-full items-center gap-2 rounded-sm px-2 text-left text-sm text-muted-foreground hover:bg-surface-2 hover:text-foreground',
-          row.checked && 'bg-soft text-foreground',
-          negated && 'text-foreground line-through',
-        )}
-      >
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        {meta}
-      </button>
-    );
+  if (row) {
+    const rowProps = { tag, label, hue, meta, onClick, negated };
+    return <SidebarRow {...rowProps} checked={row.checked} />;
+  }
 
   return (
     <span
+      data-tag={hue}
       className={cn(
-        'inline-flex h-5 max-w-full items-center rounded-sm border bg-surface-2 font-mono text-xs',
-        negated && 'border-dashed border-control',
+        'tag-chip inline-flex h-5 max-w-full items-center rounded-sm border font-mono text-xs',
+        negated && 'border-dashed',
       )}
     >
       <Body
@@ -64,30 +96,23 @@ export function TagChip(props: Props) {
         title={tag}
         className={cn(
           'inline-flex min-w-0 items-center gap-1 truncate px-1.5',
-          onClick && 'hover:text-primary',
+          onClick && 'hover:underline',
         )}
       >
-        {negated && <Ban className="size-3 shrink-0 text-subtle" aria-label="not" />}
-        {sign && <span className="text-subtle">{sign}</span>}
+        {negated && <Ban className="size-3 shrink-0" aria-label={t('not')} />}
+        {sign && <span>{sign}</span>}
         <span className="truncate">
           <span className="text-muted-foreground">{facet}</span>
           {label}
         </span>
         {meta}
         {confidence !== undefined && (
-          <span className="text-subtle tabular-nums">{confidence?.toFixed(2) ?? 'n/a'}</span>
+          <span className="text-muted-foreground tabular-nums">
+            {confidence?.toFixed(2) ?? 'n/a'}
+          </span>
         )}
       </Body>
-      {onRemove && (
-        <button
-          type="button"
-          aria-label={`Remove ${tag}`}
-          onClick={onRemove}
-          className="grid h-full w-4 shrink-0 place-items-center rounded-r-sm text-subtle hover:bg-surface-3 hover:text-foreground"
-        >
-          <X className="size-3" />
-        </button>
-      )}
+      {onRemove && <RemoveButton tag={tag} onRemove={onRemove} />}
     </span>
   );
 }

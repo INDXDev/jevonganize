@@ -1,10 +1,11 @@
+import { t } from '../../i18n/index.ts';
 import { useEffect, useState } from 'react';
 import { fileUrl } from '../../api.ts';
 import type { KindProps } from './index.tsx';
 
 const LIMIT = 256 * 1024;
 
-/** The first 256 KiB as text. HTML shows as source and is never rendered. */
+/** The first 256 KiB as text. */
 export default function Text({ file, onFail }: KindProps) {
   const [text, setText] = useState<string>();
 
@@ -29,7 +30,9 @@ export default function Text({ file, onFail }: KindProps) {
       <pre className="p-2.5 font-mono text-xs break-words whitespace-pre-wrap text-muted-foreground">
         {text}
       </pre>
-      {file.size > LIMIT && <p className="px-2.5 pb-2 text-xs text-subtle">Cut off at 256 KiB.</p>}
+      {file.size > LIMIT && (
+        <p className="px-2.5 pb-2 text-xs text-subtle">{t('Cut off at 256 KiB.')}</p>
+      )}
     </div>
   );
 }

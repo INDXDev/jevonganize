@@ -6,6 +6,17 @@ This project follows [Semantic Versioning](https://semver.org).
 
 First version, not released yet.
 
+- Follow the PC's language by default, with English, Japanese and Simplified Chinese interfaces.
+  Override it in Settings or with `config set language en|ja|zh-CN|system`; CLI help and the shared
+  browser/desktop UI use the same preference.
+
+- View options in the Files toolbar, as in Finder: tiles per row, thumbnail size, spacing and fit, list
+  columns, text size and file extensions. They are saved in the new `[view]` config.
+- Dotfiles are hidden from the file list by default, and from Organize and chat scopes with them.
+  `Mod+Shift+.` shows them.
+- Walk into subfolders from the list, show only a folder's own files, sort by kind, and double-click
+  for a preview.
+
 - Scan folders into a local index, and keep it current with a watcher. Both are free and send nothing.
 - Organize files with a decision model: extract locally, ask every enabled question in one call per
   file, cache raw answers, and sort results by confidence into a plan and a review queue.
@@ -24,6 +35,18 @@ First version, not released yet.
   runs. Only one `apply` of a plan can run, across the CLI and the server.
 - A library that suddenly has no files keeps its index rows and warns, so an unplugged drive does not
   read as every file deleted.
+- The UI does everything the CLI does: a rail of screens, an Organize screen with live progress, cost
+  and cancel, a Tags screen, and Settings > Health. Bulk tag removal, `suggest`, key removal and
+  JSON editing of `pipeline` and `profiles` are there too.
+- The UI follows the system's light or dark appearance, and either can be pinned.
+- Tags have colours: automatic by facet, and changed per tag or per facet on the Tags screen.
+- Thumbnails for HTML, text, mail, Office files and video, the same on every OS.
+- `qlmanage` is gone: it put a Quick Look icon in the Dock on every run. Without `soffice`, old Office
+  files now send no content, and without `ffmpeg`, video sends only its metadata.
+- HTML renders in the preview, sandboxed and with nothing remote loaded. Audio and video play, and
+  slides and sheets show a picture. The inspector's preview is larger and opens full size.
+- Choosing several tags in the UI now shows files with any of them, with a switch to require all.
+  `FileQuery.tag_match` and `--tag-match` carry this. The CLI and API still default to `all`.
 - Third-party licenses are listed in `THIRD_PARTY_NOTICES.md`, including two LGPL packages.
 - Three shells over one server: CLI, browser and an unsigned Electron app. An MCP server serves the
   same tools to coding agents, with an approval gate.

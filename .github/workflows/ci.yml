@@ -31,7 +31,11 @@ jobs:
       # Fails if a check rewrote a tracked file.
       - run: git diff --exit-code
   e2e:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,7 +46,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install chromium
       - run: pnpm build
-      - run: pnpm test:e2e
+      - run: pnpm exec playwright test --project=web
+      - if: runner.os == 'macOS'
+        run: pnpm exec playwright test --project=electron
       # The real failure for a package that ships a bin: something missing from the tarball.
       - name: Smoke test the packed tarball
         run: |

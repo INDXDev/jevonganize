@@ -1,5 +1,12 @@
+import { t } from '../../i18n/index.ts';
 import { Check, ChevronDown, X } from 'lucide-react';
-import { Checkbox as RCheckbox, Select as RSelect, Switch as RSwitch } from 'radix-ui';
+import {
+  Checkbox as RCheckbox,
+  Select as RSelect,
+  Slider as RSlider,
+  Switch as RSwitch,
+  ToggleGroup as RToggleGroup,
+} from 'radix-ui';
 import { useState, type ComponentProps, type KeyboardEvent, type ReactNode } from 'react';
 import { cn } from '../../lib.ts';
 
@@ -91,6 +98,60 @@ export function Select({ value, onChange, options, label, className, placeholder
   );
 }
 
+/** A choice of two to four, all in view. Pressing the chosen one keeps it, so one is always on. */
+export function Segmented({ value, onChange, options, label, className }: SelectProps) {
+  return (
+    <RToggleGroup.Root
+      type="single"
+      aria-label={label}
+      value={value}
+      onValueChange={(next) => next && onChange(next)}
+      className={cn('inline-flex h-6 rounded-md border border-control p-px', className)}
+    >
+      {options.map((o) => (
+        <RToggleGroup.Item
+          key={o.value}
+          value={o.value}
+          className="rounded-sm px-2 text-xs text-muted-foreground hover:text-foreground data-[state=on]:bg-soft data-[state=on]:text-foreground"
+        >
+          {o.label ?? o.value}
+        </RToggleGroup.Item>
+      ))}
+    </RToggleGroup.Root>
+  );
+}
+
+/** A range. `onChange` follows the drag, and `onCommit` fires once when it ends. */
+export function Slider(props: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+  onCommit: (value: number) => void;
+}) {
+  const { label, value, onChange, onCommit, ...range } = props;
+  return (
+    <RSlider.Root
+      {...range}
+      value={[value]}
+      onValueChange={([next]) => onChange(next!)}
+      onValueCommit={([next]) => onCommit(next!)}
+      className="relative flex h-4 w-full touch-none items-center select-none data-[disabled]:opacity-50"
+    >
+      <RSlider.Track className="relative h-1 grow rounded-full bg-surface-3">
+        <RSlider.Range className="absolute h-full rounded-full bg-primary" />
+      </RSlider.Track>
+      <RSlider.Thumb
+        aria-label={label}
+        className="block size-3 rounded-full border border-strong bg-surface-1 shadow-sm"
+      />
+    </RSlider.Root>
+  );
+}
+
 /** A list of short strings, edited as chips. Enter or comma adds, Backspace removes the last. */
 export function ChipInput(props: {
   value: string[];
@@ -116,7 +177,7 @@ export function ChipInput(props: {
           {v}
           <button
             type="button"
-            aria-label={`Remove ${v}`}
+            aria-label={t('Remove {name}', { name: v })}
             className="px-0.5 text-subtle hover:text-foreground"
             onClick={() => onChange(value.filter((x) => x !== v))}
           >

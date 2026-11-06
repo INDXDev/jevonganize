@@ -57,10 +57,9 @@ Step 4 is needed because `mime` says `a.ts` is `video/mp2t`, and has nothing for
 | `msg` | `@kenjiuno/msgreader` | As `eml` | Always |
 | `zip` | `@zip.js/zip.js` | `text` (entry names), `entries`, `encrypted` | Always |
 | `ffmpeg-frames` | `ffmpeg` on PATH | `images` | `ffmpeg` is found, and `images` is empty |
-| `quicklook` | `qlmanage` on PATH | `images` | macOS, and both `text` and `images` are empty |
 | `libreoffice` | `soffice` on PATH | Whatever the PDF route gives | `soffice` is found, and `text` is empty |
 
-`soffice`, `ffmpeg` and `qlmanage` are optional, and are found on PATH at startup. A missing tool is
+`soffice` and `ffmpeg` are optional, and are found on PATH at startup. A missing tool is
 skipped, with no warning. `doctor` lists which were found. They run without a shell, with the path as
 one argument.
 
@@ -88,7 +87,7 @@ use = ["text", "image"]
 
 [[pipeline]]
 match = "image/*"
-use = ["image", "exif", "screenshot", "quicklook"]
+use = ["image", "exif", "screenshot"]
 
 [[pipeline]]
 match = "audio/*"
@@ -96,7 +95,7 @@ use = ["media"]
 
 [[pipeline]]
 match = "video/*"
-use = ["media", "ffmpeg-frames", "quicklook"]
+use = ["media", "ffmpeg-frames"]
 
 [[pipeline]]
 match = "message/rfc822"
@@ -112,19 +111,19 @@ use = ["zip"]
 
 [[pipeline]]
 match = "application/vnd.openxmlformats-*"
-use = ["office", "quicklook"]
+use = ["office"]
 
 [[pipeline]]
 match = "application/vnd.oasis.*"
-use = ["office", "quicklook"]
+use = ["office"]
 
 [[pipeline]]
 match = "application/rtf"
-use = ["office", "quicklook"]
+use = ["office"]
 
 [[pipeline]]
 match = "application/epub+zip"
-use = ["office", "quicklook"]
+use = ["office"]
 
 [[pipeline]]
 match = "text/html"
@@ -132,15 +131,15 @@ use = ["office", "text"]
 
 [[pipeline]]
 match = "application/msword"
-use = ["libreoffice", "quicklook"]
+use = ["libreoffice"]
 
 [[pipeline]]
 match = "application/vnd.ms-excel"
-use = ["libreoffice", "quicklook"]
+use = ["libreoffice"]
 
 [[pipeline]]
 match = "application/vnd.ms-powerpoint"
-use = ["libreoffice", "quicklook"]
+use = ["libreoffice"]
 
 [[pipeline]]
 match = "text/*"
@@ -148,7 +147,7 @@ use = ["text"]
 
 [[pipeline]]
 match = "*"
-use = ["text", "quicklook"]
+use = ["text"]
 ```
 
 The last row also catches JSON, XML and other text with an `application/*` type.
@@ -193,9 +192,9 @@ tuned with real cost data.
 | JPEG, PNG, WebP, GIF, TIFF, AVIF | `sharp`, first frame only. EXIF fields through `exifreader`, which takes a Buffer and never a string |
 | HEIC, HEIF | Not in `sharp` prebuilds. `heic-decode` gives raw pixels, which go to `sharp` |
 | SVG | The XML as text, since `<title>` and text nodes are often the best signal, plus a rendered image |
-| RAW | Expected to fail in `sharp`. `quicklook` may cover it on macOS. Not tested |
+| RAW | Expected to fail in `sharp`. Not tested |
 | Audio | Tags, duration and codec. No content is sent, so facets judge from metadata alone |
-| Video | As audio, plus up to `images` frames from `ffmpeg`, or a `qlmanage` thumbnail. Video containers were not tested in `music-metadata` |
+| Video | As audio, plus up to `images` frames from `ffmpeg`. Video containers were not tested in `music-metadata` |
 | `.eml` | Subject, then body as plain text. Attachments are named, never opened |
 | `.msg` | As `.eml`. No real file has been parsed yet, so this is unverified |
 | Zip | Reads the central directory only, through `fs.openAsBlob`. Nothing is decompressed, so a zip bomb costs nothing. Entry names become `text`, one per line |
@@ -222,7 +221,7 @@ joiner. Those characters can hide instructions a model reads and a person cannot
 3. Flattened onto white, and encoded at quality 80 with all metadata removed.
 4. Padded with white so each side is at least 280 pixels, because Jev rejects smaller images.
 
-`source` says where the image came from: `file`, `page-1`, `frame-1` or `quicklook`.
+`source` says where the image came from: `file`, `page-1` or `frame-1`.
 
 **`metadata`** keys are normalized across formats, in `snake_case`. A key with no value is left out.
 

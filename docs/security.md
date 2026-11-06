@@ -83,6 +83,12 @@ costs listed under [Some risks remain](#some-risks-remain).
 
 ## What leaves your machine
 
+The `language` preference and PC language detection are local presentation settings. Detection reads
+the OS preference (a bounded `/usr/bin/defaults` call on macOS, a Windows API, or Linux locale
+variables); it makes no network request. Translations do not rewrite file data, tags or prompts, and
+untrusted text is never interpreted as a translation key. The existing output sanitiser still runs
+at the terminal boundary.
+
 | Action | Sent | To |
 | --- | --- | --- |
 | `scan`, `watch`, `search`, `show`, `similar`, `tags list`, `review`, `cleanup`, `doctor`, browsing | Nothing | |
@@ -200,9 +206,13 @@ accepted, so there is nothing to traverse.
 
 In the UI, per [File previews](ui.md#file-previews):
 
-- `text/html` is shown as source, and never rendered.
+- `text/html` renders in `<iframe sandbox="">` through `srcdoc`, with no script, forms or origin
+  of its own. The page's CSP applies, and a stricter one goes first in the document, so nothing the
+  file links to loads: no remote image, font, style or frame. Its links do nothing. A file that fetched one could tell a
+  server that it was opened. Its source is one click away.
+- Thumbnails never render HTML. They draw its extracted text on a canvas.
 - SVG is shown only through `<img>`, which runs no script.
-- Word output goes in `<iframe sandbox="">` with no script, and the page's CSP applies to it.
+- Word output goes in the same frame.
 - `pdfjs-dist` must stay on a current version. The page's CSP has no `unsafe-eval`.
 
 ## API keys

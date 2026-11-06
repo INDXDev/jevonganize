@@ -338,13 +338,8 @@ describe('tokens', () => {
     };
     const { model } = setup(flaky);
     const seen: number[] = [];
-    const run = decide(
-      { state: state() },
-      ['a', 'b'].map(flagFacet),
-      model,
-      store(),
-      (tokens) => void seen.push(tokens),
-    );
+    const onTokens = (tokens: number) => void seen.push(tokens);
+    const run = decide({ state: state(), onTokens }, ['a', 'b'].map(flagFacet), model, store());
     await expect(run).rejects.toThrow('no');
     expect(seen).toEqual([10]);
   });

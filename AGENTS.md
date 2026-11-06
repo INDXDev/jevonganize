@@ -37,13 +37,13 @@ install script needs an `allowBuilds` entry in `pnpm-workspace.yaml`. Pin `ai`, 
 
 - Dependencies point down the [layers](docs/architecture.md#layers), from interface to tools, flows,
   engines, infrastructure and `types.ts`. `.oxlintrc.json` enforces part of this.
-- Every operation is one entry in the tool table in `core/tools.ts`. The CLI, HTTP API, chat and MCP
-  all call it. Never add a route or a command that does the work itself.
+- Every operation is one entry in the tool table, which `core/tools.ts` assembles from the rows in
+  `core/tools/`. The CLI, HTTP API, chat and MCP all call it. Never add a route or a command that does the work itself.
 - `agent: false` on a tool is a security boundary. Keys, config and adding folders stay out of reach of
   models. A new tool copies its `agent` and `approval` values from the closest row in
   [the tool table](docs/contracts.md#the-tool-table), and a doubt resolves to the stricter one.
 - Every tag write goes through a plan and `apply_plan`, so it can be seen and undone.
-- Only `core/tags.ts` touches xattrs or NTFS streams. Only `core/db.ts` contains SQL. Only `ai/` imports
+- Only `core/tags.ts` touches xattrs or NTFS streams. Only `core/db.ts` and `core/db/` contain SQL. Only `ai/` imports
   `ai` or `@ai-sdk/*`. Only `extract/` parses file contents, in workers. Only `src/desktop` imports
   `electron`.
 - `web/` imports only types from outside itself, and talks to the server over HTTP.

@@ -1,13 +1,15 @@
+import { t } from '../i18n/index.ts';
 import { Ban, Check, ChevronRight, Circle, Copy, LoaderCircle, Undo2, X } from 'lucide-react';
-import { useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import type { Job, Plan, TagOp } from '../../types.ts';
 import { act, call, useTool } from '../api.ts';
-import { cn, formatCount, formatTime, keyLabel } from '../lib.ts';
+import { cn, formatCost, formatCount, formatDuration, formatTime, keyLabel } from '../lib.ts';
 import { notify, useTabs } from '../tabs.ts';
 import { FileList } from './file-list.tsx';
 import { TagChip } from './tag-chip.tsx';
 import { Button } from './ui/button.tsx';
+import { Progress } from './ui/progress.tsx';
 
 type Tone = 'wait' | 'run' | 'ok' | 'bad' | 'off';
 
@@ -29,8 +31,8 @@ const planTone: Record<Plan['status'], Tone> = {
 
 const copy = (text: string) =>
   void navigator.clipboard.writeText(text).then(
-    () => notify(`Copied: ${text}`),
-    () => notify('Could not copy', true),
+    () => notify(t('Copied: {text}', { text })),
+    () => notify(t('Could not copy'), true),
   );
 
 function Shell(props: {
@@ -82,13 +84,13 @@ function Changes({ id }: { id: string }) {
     })),
   });
   const rows = files.flatMap((f) => (f.data ? [f.data] : []));
-  if (!plan) return <p className="text-subtle">Loading changes</p>;
+  if (!plan) return <p className="text-subtle">{t('Loading changes')}</p>;
   return (
     <div className="-mx-1 rounded-sm border bg-surface-1 p-1">
       <FileList
         mode="compact"
         rows={rows}
-        label="Files in this plan"
+        label={t('Files in this plan')}
         renderTrailing={(row) => {
           const op = byFile.get(row.id);
           return (
@@ -101,7 +103,10 @@ function Changes({ id }: { id: string }) {
       />
       {plan.ops.length > ops.length && (
         <p className="px-1.5 pt-1 text-xs text-subtle">
-          First {ops.length} of {formatCount(plan.ops.length)} files
+          {t('First {shown} of {total} files', {
+            shown: ops.length,
+            total: formatCount(plan.ops.length),
+          })}
         </p>
       )}
     </div>
@@ -109,6 +114,52 @@ function Changes({ id }: { id: string }) {
 }
 
 const total = (list: [string, number][]) => list.reduce((n, [, c]) => n + c, 0);
+
+type PlanFooterProps = {
+  plan: Plan;
+  open: boolean;
+  onToggle: () => void;
+  apply: () => void;
+  onDeny?: Approval['onDeny'];
+  command: string;
+};
+
+function PlanFooter({ plan, open, onToggle, apply, onDeny, command }: PlanFooterProps) {
+  const proposed = plan.status === 'proposed';
+  return (
+    <footer className="flex flex-wrap items-center gap-1.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="mr-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <ChevronRight className={cn('size-3', open && 'rotate-90')} />
+        {open ? t('Hide changes') : t('Show changes')}
+      </button>
+      {proposed && (
+        <Button
+          variant="ghost"
+          onClick={onDeny ?? (() => void act('discard_plan', { id: plan.id }))}
+        >
+          {onDeny ? t('Deny') : t('Discard')}
+        </Button>
+      )}
+      <Button variant="ghost" onClick={() => copy(command)} aria-label={t('Copy as CLI')}>
+        <Copy /> CLI
+      </Button>
+      {plan.status === 'applied' && (
+        <Button onClick={() => void act('undo_plan', { id: plan.id })}>{t('Undo')}</Button>
+      )}
+      {proposed && (
+        <Button variant="primary" onClick={apply}>
+          {t('Apply')}
+          <span className="font-mono text-2xs opacity-70">{keyLabel('mod+enter')}</span>
+        </Button>
+      )}
+    </footer>
+  );
+}
 
 function PlanBlock({ plan, onApply, onDeny }: { plan: Plan } & Approval) {
   const [open, setOpen] = useState(false);
@@ -136,9 +187,9 @@ function PlanBlock({ plan, onApply, onDeny }: { plan: Plan } & Approval) {
       onKeyDown={onKeyDown}
     >
       <p className="font-mono text-xs text-muted-foreground">
-        {formatCount(summary.files)} files · +{formatCount(total(added))} −
+        {t('{count} files', { count: formatCount(summary.files) })} · +{formatCount(total(added))} −
         {formatCount(total(removed))}
-        {errors.length > 0 && ` · ${errors.length} errors`}
+        {errors.length > 0 && ` · ${t('{count} errors', { count: errors.length })}`}
       </p>
       <div className="flex flex-wrap gap-1">
         {added.slice(0, 4).map(([tag, count]) => (
@@ -158,84 +209,114 @@ function PlanBlock({ plan, onApply, onDeny }: { plan: Plan } & Approval) {
           </p>
         ))}
       {open && <Changes id={plan.id} />}
-      <footer className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          className="mr-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ChevronRight className={cn('size-3', open && 'rotate-90')} />
-          {open ? 'Hide changes' : 'Show changes'}
-        </button>
-        {proposed && (
-          <Button
-            variant="ghost"
-            onClick={onDeny ?? (() => void act('discard_plan', { id: plan.id }))}
-          >
-            {onDeny ? 'Deny' : 'Discard'}
-          </Button>
-        )}
-        <Button variant="ghost" onClick={() => copy(command)} aria-label="Copy as CLI">
-          <Copy /> CLI
-        </Button>
-        {plan.status === 'applied' && (
-          <Button onClick={() => void act('undo_plan', { id: plan.id })}>Undo</Button>
-        )}
-        {proposed && (
-          <Button variant="primary" onClick={apply}>
-            Apply <span className="font-mono text-2xs opacity-70">{keyLabel('mod+enter')}</span>
-          </Button>
-        )}
-      </footer>
+      <PlanFooter
+        plan={plan}
+        open={open}
+        onToggle={() => setOpen(!open)}
+        apply={apply}
+        onDeny={onDeny}
+        command={command}
+      />
     </Shell>
   );
 }
 
-const jobTitle: Record<Job['kind'], string> = {
+const jobTitle = {
   scan: 'Scanning',
   organize: 'Organizing',
   apply: 'Applying plan',
   undo: 'Undoing plan',
-};
+} as const;
+
+const FOUND = [
+  ['added', 'new'],
+  ['changed', 'changed'],
+  ['moved', 'moved'],
+  ['removed', 'removed'],
+  ['restores', 'restore items'],
+  ['skipped', 'skipped'],
+] as const;
+
+/** What the numbers say so far, in one line. */
+function jobFacts(job: Job, now: number): string[] {
+  const running = job.status === 'running';
+  const facts = [
+    job.kind === 'scan'
+      ? t('{count} files', { count: formatCount(job.done) })
+      : t('{done} of {total}', { done: formatCount(job.done), total: formatCount(job.total) }),
+  ];
+  const { scan } = job;
+  if (scan)
+    for (const [key, word] of FOUND)
+      if (scan[key])
+        facts.push(t('{count} {kind}', { count: formatCount(scan[key]), kind: t(word) }));
+  if (job.failed) facts.push(t('{count} failed', { count: formatCount(job.failed) }));
+  if (job.tokens !== undefined) facts.push(t('{count} tokens', { count: formatCount(job.tokens) }));
+  if (job.cost_usd !== undefined) facts.push(formatCost(job.cost_usd));
+  if (running && job.done > 0 && job.total > job.done) {
+    const left = ((now - job.started_at) / job.done) * (job.total - job.done);
+    facts.push(t('{time} left', { time: formatDuration(left) }));
+  }
+  return facts;
+}
+
+/** The clock, ticking while `live`, so time left moves between events. */
+function useNow(live: boolean) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!live) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [live]);
+  return now;
+}
 
 function JobBlock({ job }: { job: Job }) {
-  const tone: Tone = job.status === 'running' ? 'run' : job.status === 'done' ? 'ok' : 'bad';
+  const running = job.status === 'running';
+  const now = useNow(running);
+  const allFailed = job.total > 0 && job.failed === job.total;
+  const tone: Tone = running ? 'run' : job.status === 'done' && !allFailed ? 'ok' : 'bad';
   const navigate = useTabs((s) => s.navigate);
+  const known = job.kind !== 'scan' && job.total > 0;
+  const percent = known ? ` ${Math.round((job.done / job.total) * 100)}%` : '';
   return (
-    <Shell tone={tone} title={jobTitle[job.kind]} meta={job.status}>
-      <p className="font-mono text-xs text-muted-foreground">
-        {formatCount(job.done)} of {formatCount(job.total)}
-        {job.tokens !== undefined && ` · ${formatCount(job.tokens)} tokens`}
-        {job.cost_usd !== undefined &&
-          ` · ${job.cost_usd === null ? 'cost unknown' : `$${job.cost_usd.toFixed(2)}`}`}
-      </p>
-      {job.status === 'running' && (
-        <>
-          <progress
-            aria-label={jobTitle[job.kind]}
-            value={job.done}
-            max={job.total || 1}
-            className="block h-0.5 w-full appearance-none [&::-webkit-progress-bar]:bg-surface-3 [&::-webkit-progress-value]:bg-primary"
-          />
-          <footer className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate font-mono text-xs text-subtle">
-              {job.current}
-            </span>
-            <Button variant="ghost" onClick={() => void act('cancel_job', { id: job.id })}>
-              <Ban /> Cancel
-            </Button>
-          </footer>
-        </>
+    <Shell
+      tone={tone}
+      title={`${t(jobTitle[job.kind])}${running ? percent : ''}`}
+      meta={t(job.status)}
+    >
+      {running && (
+        <Progress
+          label={t(jobTitle[job.kind])}
+          value={known ? job.done : undefined}
+          max={known ? job.total : undefined}
+        />
+      )}
+      <p className="font-mono text-xs text-muted-foreground">{jobFacts(job, now).join(' · ')}</p>
+      {running && (
+        <footer className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-subtle">
+            {job.current}
+          </span>
+          <Button variant="ghost" onClick={() => void act('cancel_job', { id: job.id })}>
+            <Ban />
+            {t('Cancel')}
+          </Button>
+        </footer>
       )}
       {job.error && <p className="font-mono text-xs text-destructive">{job.error}</p>}
+      {job.warnings?.slice(0, 5).map((warning) => (
+        <p key={warning} className="truncate font-mono text-xs text-warn" title={warning}>
+          {warning}
+        </p>
+      ))}
       {job.plan_id && (
         <button
           type="button"
           className="text-xs text-primary hover:underline"
           onClick={() => navigate('screen=review')}
         >
-          Plan {job.plan_id}
+          {t('Plan {id}', { id: job.plan_id })}
         </button>
       )}
     </Shell>

@@ -5,7 +5,7 @@ this document holds everything else. Change a contract here first.
 
 ## The tool table
 
-`core/tools.ts` defines every operation once:
+`core/tools.ts` assembles the table from the rows in `core/tools/`. Every operation is defined once:
 
 ```ts
 interface Tool<I, O> {
@@ -40,6 +40,7 @@ it, so neither imports the other.
 | `get_file` | `id` or `path` | `FileDetail` | no | yes |
 | `similar_files` | `id`, `limit?` | `SimilarFile[]` | no | yes |
 | `list_tags` | `folder?`, `facet?` | `TagCount[]` | no | yes |
+| `list_folders` | `folder` | `FolderCount[]`: the folders directly under it, by name, with the indexed files below each | no | yes |
 | `list_facets` | none | `FacetInfo[]` | no | yes |
 | `save_facet` | `Facet` | `Facet` (custom only) | yes | no |
 | `delete_facet` | `id` | `void` (custom only) | yes | no |
@@ -57,13 +58,29 @@ it, so neither imports the other.
 | `list_reviews` | `tag?`, `limit?` | open `ReviewItem[]`, ordered by tag, then confidence | no | yes |
 | `resolve_reviews` | `ids`, `accept` | `Plan` of the accepted items, or `null` | stores a plan | yes, with approval |
 | `suggest_tags` | `id` | candidate tags, as review items | yes | yes, with approval |
+| `list_vocabulary` | `facet?` | `VocabularyEntry[]`: values of open facets | no | yes |
 | `set_vocabulary` | `facet`, `value`, `state` | `void` | yes | no |
 | `cleanup_report` | none | near-duplicates, one-file tags, over-broad tags | no | yes |
-| `get_config` | none | config and its JSON Schema | no | no |
+| `get_config` | none | config, its JSON Schema, and the config, data and cache paths | no | no |
 | `set_config` | partial config | config | yes | no |
+| `list_keys` | none | `KeyList`: each provider's key source, never a key | no | no |
 | `set_api_key` | `provider`, `key` | `void` | yes | no |
+| `remove_api_key` | `provider` | `{ removed }` | yes | no |
+| `set_env_keys` | `allowed` | `void`: allows or refuses keys from the environment | yes | no |
 | `reveal_file` | `id` | `void`: shows it in the file manager | no | no |
 | `doctor` | none | checks: runtime, key, volumes, optional tools | no | yes |
+
+`FileQuery.hide_dotfiles` leaves out names starting with a dot and anything in such a folder, counted
+from the library, so a library inside a dot folder still shows. `direct_only` keeps to what sits
+directly in `folder`. Both default to off: only the UI sets them, from `[view]`.
+
+`FileQuery.tag_match` says whether a file needs `any` of `tags` or `all` of them. The default is
+`all`, so a query only ever gets narrower unless it asks otherwise: a script or agent that repeats a
+tag keeps its meaning, and a plan built from a query cannot silently grow. The UI always says which it
+wants, and starts on `any`. `exclude_tags` is not affected: a file with any of them is out.
+
+Every tool has a place in the UI, which `test/tools.test.ts` checks. See
+[ui.md](ui.md#cli-and-ui-parity).
 
 `agent: false` is a security boundary. A model must never reach keys or config, or add folders.
 `apply_plan` takes only an id, so what a person saw is exactly what runs. Tools that start a job
@@ -121,15 +138,15 @@ Extractors run in pipeline order and only fill what is still empty. See [pipelin
 
 ```ts
 resolveModel(config: Config, profile?: string): Promise<ResolvedModel>  // UserError with no key, unless `chat` or `compatible` has a base_url
-decide(file: { state: FileState }, facets: Facet[], model: ResolvedModel, db: Db,
-       onTokens?: (tokens: number) => void)   // each billed call, refused or later failed included
+decide(file: { state: FileState; onTokens?: (tokens: number) => void },  // each billed call, refused or later failed included
+       facets: Facet[], model: ResolvedModel, db: Db)
   : Promise<{ answers: Answer[]; tokens: number; cached: number; warnings: string[] }>
 suggest(state: FileState, vocabulary: Tag[], model: ResolvedModel): Promise<Tag[]>
 chat(messages: UIMessage[], ctx: Context): Response                     // streaming
 estimateCost(tokens: number, model: ResolvedModel): number | null
 ```
 
-## Facets: `core/facets.ts`
+## Facets: `core/facets.ts`, `core/facet-answers.ts`
 
 ```ts
 loadFacets(config: Config): Promise<Facet[]>            // presets plus custom; one bad file warns
@@ -138,13 +155,14 @@ facetHash(facet: Facet): string                         // covers only what the 
 toQuestions(facet: Facet): Record<string, Question>     // SDK question objects, as plain data
 fromAnswers(facet: Facet, raw: RawAnswers): Answer[]    // one per label for `multi`
 derive(facet: Facet, state: FileState, config: Config): Tag | null   // `field` facets
-resolve(answers: Answer[], facets: Facet[], config: Config, existing: Tag[], rejected: Tag[])
+resolve(answers: Answer[], facets: Facet[], config: Config,
+        tags: { existing: Tag[]; rejected: Tag[]; derived?: Tag[] })
   : { apply: Tag[]; review: { tag: Tag; confidence: number | null }[] }  // pure
 ```
 
 ## Database: `core/db.ts`
 
-All SQL is here, behind named functions. Tables:
+All SQL is here and in `core/db/`, behind named functions. Tables:
 
 ```sql
 CREATE TABLE library (path TEXT PRIMARY KEY, scanned_at INTEGER);
@@ -253,17 +271,51 @@ A plan stays `proposed`, and the Review view lists proposed plans beside review 
 
 ## Config
 
+`language` is an application-wide setting: `system` (default), `en`, `ja`, or `zh-CN` (Simplified Chinese).
+It controls human-facing interface text and formatting in the CLI and the shared browser/desktop UI;
+it does not follow browser headers, URLs, or per-folder files. `system` uses the server machine's
+preferred UI language: macOS global AppleLanguages, Windows user UI language, or the Linux session
+locale (`LC_ALL`, `LC_MESSAGES`, then `LANG`; `LANGUAGE` takes precedence for messages outside a
+`C`/`POSIX` session). Japanese and Chinese variants map to `ja` and `zh-CN`; other languages fall back
+to English. The detected language is fixed for the process lifetime.
+`get_config` also returns `system_language`, the resolved language, outside the persisted config.
+A saved change updates the UI without restarting; the CLI reads it on each invocation.
+Command names, config keys, tool schemas, JSON and
+MCP results, stored tags, facet questions and model/cache semantics stay independent of this setting.
+Translations are explicit catalogs with named interpolation; filenames, provider errors and user
+content are never looked up as translation keys. Native/parser/provider diagnostics may retain their
+original language, as can shared engine/tool and third-party diagnostics. English remains the startup
+fallback before valid config can be read.
+
 See [configuration.md](configuration.md). One zod schema in `core/config.ts` validates the TOML
 file, the `set_config` tool and the settings form, which is generated from its JSON Schema.
 Keys stay `snake_case` as written, with no mapping layer. The whole file, with its defaults:
 
 ```toml
+language = "system"              # system, en, ja, zh-CN; presentation only
 port = 48620                     # the next free port is used if this one is taken
 concurrency = 8
 max_tags = 10                    # hard cap per file on what organize adds, counting a person's tags
 fiscal_year_start = 4            # month, for `fiscal-year` fields
 exclude = ["node_modules", ".git", "*.tmp", ".DS_Store", "._*", "Thumbs.db"]   # added to the built-in secret exclusions
 send_images = true               # false keeps every image on this machine
+
+[tag_colors]                     # empty: every facet gets an automatic colour
+# "doc-type" = "blue"            # a whole facet
+# "doc-type:invoice" = "red"     # one tag, which beats its facet
+
+[view]                           # how the file list looks. See configuration.md
+show_dotfiles = false
+include_subfolders = true
+show_extensions = true
+thumbnail_size = 160
+grid_columns = 0
+grid_spacing = 10
+thumbnail_fit = "cover"
+grid_info = "tags"
+text_size = 12
+list_columns = ["tags", "size", "modified"]
+list_thumbnails = false
 
 [provider]                       # the default model
 name = "openai"

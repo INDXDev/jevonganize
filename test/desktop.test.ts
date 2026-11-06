@@ -41,6 +41,7 @@ vi.mock('electron', async () => {
     }
   }
   return {
+    nativeTheme: { shouldUseDarkColors: true },
     app: Object.assign(new EventEmitter(), {
       requestSingleInstanceLock: () => true,
       whenReady: () => Promise.resolve(),

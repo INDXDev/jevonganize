@@ -11,7 +11,7 @@ import { UserError } from '../core/config.ts';
 import type { FileState } from '../types.ts';
 import { extractors } from './extractors.ts';
 
-export { optionalTools } from './extractors.ts';
+export { optionalTools } from './tools.ts';
 
 /** Source runs `worker.ts` beside this file. A bundle may put this code in any chunk of `dist/`. */
 function workerFile(): string {

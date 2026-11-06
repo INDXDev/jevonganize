@@ -172,7 +172,9 @@ describe('/file/:id', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('');
   });
+});
 
+describe('/file/:id refusals', () => {
   test('refuses an id not in the index, and anything that is not a plain id', async () => {
     expect((await send('/file/999')).status).toBe(404);
     expect((await send('/file/..%2F..%2Fetc%2Fpasswd')).status).toBe(404);
@@ -212,7 +214,7 @@ describe('/thumb/:id', () => {
   });
 
   test('is 404 for a file with no thumbnail, or an unknown one', async () => {
-    const id = await indexed('a.txt', 'x');
+    const id = await indexed('a.bin', Buffer.from([0, 1, 2, 3, 255]));
     expect((await send(`/thumb/${id}`)).status).toBe(404);
     expect((await send('/thumb/999')).status).toBe(404);
   });

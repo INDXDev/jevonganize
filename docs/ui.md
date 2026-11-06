@@ -1,7 +1,19 @@
 # UI
 
+The app follows the PC language by default. Settings > General > Language offers System default,
+English, 日本語 and 简体中文, saved as the global `language` config. A save updates interface text,
+accessibility labels and formatting without restarting or discarding the current view. The browser
+and Electron use the same catalogs and the server's detected PC language. User content and tag
+identifiers keep their original text. See [Interface language](configuration.md#interface-language).
+
+CI config runs browser E2E, including saved-language switching and PC-language selection, on macOS,
+Linux and Windows. The Electron smoke test runs on macOS; this does not verify packaged Linux or
+Windows desktop apps.
+
 The UI is one React app, built to `dist/web/` and served by the local server. The browser and the
-desktop window load the same pages. It is dark only in v1.
+desktop window load the same pages. It follows the system's light or dark appearance, and a person
+can pin either one. Everything the CLI does can be done here, see
+[CLI and UI parity](#cli-and-ui-parity).
 
 `web/` imports only types from outside itself and talks to the server over HTTP, through
 [`call()`](contracts.md#http), `/api/events`, `/api/chat`, `/thumb/:id` and `/file/:id`.
@@ -15,34 +27,38 @@ or Cursor's real values.** No official Cursor colours were found, and Warp's UI 
 `src/web/tokens.css` holds them. Sizes are written in `px` for clarity and ship as `rem`, so browser
 zoom works.
 
+Colours are written `light-dark(light, dark)`, so each token is defined once, with both values side
+by side.
+
 ```css
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;   /* follows the OS */
 
-  /* surfaces: darkest at the back */
-  --bg: #0e0f11;          /* window */
-  --surface-1: #141518;   /* panes */
-  --surface-2: #1b1d21;   /* cards, inputs, hover */
-  --surface-3: #24262b;   /* selected, overlays */
+  /* surfaces. Dark: darkest at the back. Light: panes white on a grey window */
+  --bg: light-dark(#f3f4f6, #0e0f11);          /* window */
+  --surface-1: light-dark(#ffffff, #141518);   /* panes */
+  --surface-2: light-dark(#f1f2f4, #1b1d21);   /* cards, inputs, hover */
+  --surface-3: light-dark(#e4e6ea, #24262b);   /* selected */
+  --overlay: light-dark(#ffffff, #24262b);     /* dialogs, menus */
 
   /* borders */
-  --border: rgb(255 255 255 / 0.08);        /* decorative hairline */
-  --border-strong: rgb(255 255 255 / 0.14); /* pane dividers */
-  --border-control: #71757e;                /* inputs, checkboxes: >= 3:1 */
+  --border: light-dark(rgb(0 0 0 / 0.09), rgb(255 255 255 / 0.08));         /* decorative hairline */
+  --border-strong: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));  /* pane dividers */
+  --border-control: light-dark(#7e828b, #71757e);                           /* inputs: >= 3:1 */
 
   /* text */
-  --text: #ededef;
-  --text-2: #a8abb3;
-  --text-3: #8b8f98;
+  --text: light-dark(#1b1c1f, #ededef);
+  --text-2: light-dark(#4d5159, #a8abb3);
+  --text-3: light-dark(#5e626b, #8b8f98);
 
   /* one accent; status colours only for status */
-  --accent: #7aa7ff;
-  --accent-soft: rgb(122 167 255 / 0.16);
-  --on-accent: #0e0f11;
-  --ok: #5fcf8e;
-  --warn: #e6b450;
-  --err: #f2777a;
-  --focus: #7aa7ff;
+  --accent: light-dark(#2a5bd0, #7aa7ff);
+  --accent-soft: light-dark(rgb(42 91 208 / 0.12), rgb(122 167 255 / 0.16));
+  --on-accent: light-dark(#ffffff, #0e0f11);
+  --ok: light-dark(#177245, #5fcf8e);
+  --warn: light-dark(#8a5a00, #e6b450);
+  --err: light-dark(#c02b2b, #f2777a);
+  --focus: var(--accent);
 
   /* type: 13px base, as in desktop tools */
   --font-ui: 'Inter Variable', system-ui, sans-serif;
@@ -60,7 +76,7 @@ zoom works.
 
   /* shape */
   --radius-sm: 4px;  --radius-md: 6px;  --radius-lg: 10px;
-  --shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.5);
+  --shadow-overlay: 0 12px 32px light-dark(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.5));
 
   /* motion: fast, and never on the list itself */
   --dur-fast: 80ms;  --dur: 120ms;  --dur-slow: 180ms;
@@ -71,7 +87,11 @@ zoom works.
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 @media (prefers-contrast: more) {
-  :root { --border: rgb(255 255 255 / 0.3); --text-2: #d0d2d8; --text-3: #b8bbc2; }
+  :root {
+    --border: light-dark(rgb(0 0 0 / 0.35), rgb(255 255 255 / 0.3));
+    --text-2: light-dark(#33363c, #d0d2d8);
+    --text-3: light-dark(#44474e, #b8bbc2);
+  }
 }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 ```
@@ -82,7 +102,7 @@ Bind them to shadcn and Tailwind once, so copied components inherit them:
 @theme inline {
   --color-background: var(--bg);
   --color-card: var(--surface-1);
-  --color-popover: var(--surface-3);
+  --color-popover: var(--overlay);
   --color-muted: var(--surface-2);
   --color-foreground: var(--text);
   --color-muted-foreground: var(--text-2);
@@ -94,9 +114,21 @@ Bind them to shadcn and Tailwind once, so copied components inherit them:
 }
 ```
 
+### Theme
+
+`useWindow.theme` is `system` (the default), `light` or `dark`. It is kept in `localStorage`, per
+window, and is not config. It lands on `<html data-theme>`, where `light` and `dark` set
+`color-scheme` and `system` sets nothing, so the OS decides and changes apply live. No component
+branches on the theme: they only use tokens.
+
+Three controls set it: the button at the right of the title bar, which cycles through the three,
+Settings > Appearance, and the palette. The native title bar on Windows and Linux follows the OS, as
+the window has no IPC to be told otherwise. The frame around a Word preview takes the current colours
+when it opens.
+
 Rules:
 
-- Overlays use `--surface-3`, a `--border-strong` outline and `--shadow-overlay`. Nothing else casts
+- Overlays use `--overlay`, a `--border-strong` outline and `--shadow-overlay`. Nothing else casts
   a shadow.
 - Accent marks focus, selection and the primary action only. Chrome stays neutral.
 - Lists do not animate. Panels and overlays may, within `--dur-slow`.
@@ -105,20 +137,32 @@ Rules:
 
 ## The shell
 
-Every view sits in the same frame: title bar with tabs, a content area of [panes](#component-rules),
-and a status bar.
+Every view sits in the same frame: title bar with tabs, a rail of screens, a content area of
+[panes](#component-rules), and a status bar.
 
 ```text
-┌ ● ● ●  [Docs] [Invoices ×] [+]                     ⌘K Search… ────┐
-├───────────────────────────────────────────────────────────────────┤
-│                            view panes                             │
-├───────────────────────────────────────────────────────────────────┤
-│ 12,402 files · 1 selected   Review 38   ⟳ Scanning 80%   ⌘I Chat  │
+┌ ● ● ●  [Docs] [Invoices ×] [+]                  ⌘K Search…  ☀ ────┐
+├──────┬────────────────────────────────────────────────────────────┤
+│ Files│                                                            │
+│ Orgz │                                                            │
+│ Revw │                         view panes                         │
+│ Tags │                                                            │
+│ Fcts │                                                            │
+│ Actv │                                                            │
+│ Sets │                                                            │
+├──────┴────────────────────────────────────────────────────────────┤
+│ 12,402 files · 1 selected   ⟳ organize ▓▓▓░ 80%  Review 38  ⌘I Chat│
 └───────────────────────────────────────────────────────────────────┘
 ```
 
+The rail shows every screen, from `SCREENS` in `view-query.ts`, which also gives the `g` shortcuts and
+tab titles. Review carries a count. Switching screen keeps the rest of the query, so the filter set
+in Files is the scope in Organize.
+
 The status bar shows the file count, the selection, pending reviews (from the `reviews` event), the
-running job (from the `job` event) and the chat toggle. Clicking the job opens the activity screen.
+running job with a progress bar (from the `job` event) and the chat toggle. Clicking the job opens the
+activity screen. While a job runs, `status` is also polled every three seconds, so an end that was
+missed during a reconnect still shows. A job's end is announced in the status bar.
 
 On `files` events, React Query invalidates the affected queries. It does not refetch every page.
 
@@ -142,14 +186,15 @@ stays the same. The server uses `port` from config unless that port is taken.
 
 | Param | Values | Meaning |
 | --- | --- | --- |
-| `screen` | `browse` (default), `review`, `facets`, `settings`, `activity` | Which view |
+| `screen` | `browse` (default), `organize`, `review`, `tags`, `facets`, `activity`, `settings` | Which view |
 | `folder`, `text`, `mime`, `status`, `sort`, `order` | As in `FileQuery` | Passed through unchanged |
 | `tag` | Repeatable | `FileQuery.tags`. On `review`, the open group |
+| `match` | `any` (default), `all` | `FileQuery.tag_match` |
 | `not` | Repeatable | `FileQuery.exclude_tags` |
 | `view` | `grid` (default), `list` | Layout of the file list |
 | `file` | File id | The file in the inspector |
-| `facet` | Facet id | The facet open in the editor |
-| `section` | Section id | The section on `settings` or `review` |
+| `facet` | Facet id | The facet open in the editor, or the facet filter on `tags` |
+| `section` | Section id | The section on `settings` or `review`, or the plan status on `activity` |
 
 The selection, the open panes and the chat are not view state, so they are not in the query. They
 belong to the window. `limit` and `offset` are not in it either: the virtual list sets them.
@@ -220,13 +265,27 @@ written to a file until the last step, and only then by approving a plan.
 - Tags come from `list_tags`, grouped by `facet`, with plain tags last under "Other". Counts cover
   the current folder, not the other filters.
 - Click a tag to add it to `tag`. `Alt`+click adds it to `not`. Child tags match, as `FileQuery.tags`
-  says.
+  says. Files with **any** of the chosen tags show.
 - Type is a fixed list that sets `mime`: PDF, Images (`image/*`), Audio, Video, Text. It has no
   counts, as no tool gives them.
 - Status sets `status`: New, Organized, Failed.
 
+**Filter bar.** The chosen tags sit above the list, joined by the word "or". With two or more, an
+`Any tag | All tags` switch appears beside them. Choosing All tags sets `match=all`, and the word
+becomes "and". `m` does the same. Excluded tags are always left out, whichever is chosen. The toolbar
+holds Scan, which updates the library this folder is in, and Organize, which opens that screen.
+
 **File list.** Rows come from `search_files`. Grid and list are the same [`FileList`](#component-rules).
-Sorting happens in SQLite, never in the browser. A list row shows at most three tag chips, then `+N`.
+Sorting happens in SQLite, never in the browser, by name, kind, date or size. A list row shows at most
+three tag chips, then `+N`. A double click opens the quick preview: nothing opens a file in its own app.
+
+**Subfolders.** With a folder open, the folders directly under it sit above the list, from
+`list_folders`. Clicking one goes in, and the path above the list goes back up.
+
+**View options.** The sliders button, or `Mod+J`, changes the [`[view]`](configuration.md#view) config:
+tiles per row, thumbnail size, spacing, whole or cropped thumbnails, the line under a name, list
+columns, text size, dotfiles, subfolders and extensions. A slider redraws as it moves and saves when it
+is let go. What a view hides, Organize and chat leave out too.
 A file on a volume that cannot store tags shows no tag actions anywhere.
 
 **Inspector.** Opens when a file is clicked, and sets `file`. It calls `get_file` and `similar_files`.
@@ -235,18 +294,69 @@ A file on a volume that cannot store tags shows no tag actions anywhere.
 | --- | --- |
 | Preview | See [File previews](#file-previews) |
 | Facts | Kind, size, modified, path with a Reveal action (`reveal_file`) |
-| Tags | Every tag as a chip. `+` adds and `×` removes, through `propose_changes` and `apply_plan`. A single-file change applies at once, because the person made it directly |
+| Tags | Every tag as a chip. `+` adds and `×` removes, through `propose_changes` and `apply_plan`. A single-file change applies at once, because the person made it directly. The spark calls `suggest_tags`, which sends this file to the provider, and its results appear under Pending |
 | Pending | The file's `reviews`, with accept and reject |
 | Metadata | `metadata` as a key and value table, collapsed |
 | Answers | `answers`: facet, value, confidence, and `estimated` as a label. Collapsed |
-| Similar files | `similar_files`, ordered best first by `score`. Each row shows name, score to two decimals and shared tags. A click moves the inspector to that file |
+| Similar files | `similar_files`, ordered best first by `score`. Each row shows name, score to two decimals and shared tags. A click moves the inspector to that file. More asks for four times as many |
 
-With several files selected, the inspector shows the count and the tags they share, and `t` tags them
-all. That change is a plan, shown as a block, and needs Apply. With nothing selected, it shows folder
+With several files selected, the inspector shows the count and the tags they share. `t` tags them all
+and `Shift+T` removes a tag from them all. That change is a plan, shown as a block, and needs Apply. With nothing selected, it shows folder
 counts.
 
 A "Select all" acts on the query, not on ids. It sends `query` to `propose_changes`, so it works
 across files that were never loaded.
+
+## Organize
+
+`screen=organize`. The screen for `jevonganize organize`, with its flags as controls. Its scope is the
+tab's own query, so filters set in Files carry over, and nothing is sent until Organize is pressed.
+
+```text
+┌ Organize ──────────────────────────┬ Run ─────────────────────────┐
+│ Folder [~/Documents     ▾]  [Scan] │ ┌ ⟳ Organizing 62% ─ running ┐│
+│ [topic:law ×] or [topic:tax ×]     │ │ ▓▓▓▓▓▓▓▓▓▓░░░░░░           ││
+│ Limit  [ All ]                     │ │ 256 of 412 · 870k tokens · ││
+│ Facets                             │ │ about $0.09 · 40s left     ││
+│  ▸ ☑ core        4/4               │ │ ~/Documents/a.pdf  [Cancel]││
+│  ▸ ☐ finance     0/12              │ └────────────────────────────┘│
+│ BEFORE YOU START                   │                               │
+│ Sent to openai for each file: ...  │                               │
+│ 412 files · 38 cached · 9 facets   │                               │
+├────────────────────────────────────┤                               │
+│ ◯ Apply when ready  [Organize 412] │                               │
+└────────────────────────────────────┴───────────────────────────────┘
+```
+
+| CLI | Control | Tool |
+| --- | --- | --- |
+| `<path>`, query flags | Folder and the [filter bar](#browser) | `FileQuery` |
+| `--limit` | Limit | `FileQuery.limit` |
+| `--facets` | Facets. Ticks start on the enabled facets and hold for this run only | `facets` |
+| `--dry-run` | Always on: the estimate updates as the controls change | `estimate` |
+| `--apply` | Apply when ready | `apply_plan`, once the job ends |
+| Ctrl-C | Cancel on the block | `cancel_job` |
+
+- The numbers in the notice come from `[budget]` and `send_images`. Onboarding uses the same
+  `SendNotice`.
+- With no key the button is disabled and links to Settings > Keys, as organize would refuse.
+- Run shows each running job. Once it ends, it shows the result, the plan as a block with Apply, and a
+  link to any new review items.
+- Apply when ready is remembered by the window that started the run, so a reload before the end
+  leaves the plan waiting. It never applies a run where every file failed. Items in the review band
+  stay in the queue.
+
+## Tags
+
+`screen=tags`. Every tag with its count, from `list_tags`, narrowed by the tab's folder, the `facet`
+param and a text filter. Up to 500 rows show.
+
+| Action | Tools |
+| --- | --- |
+| Show files | Opens a new tab filtered by the tag |
+| Rename or merge | `rename_tag`. The plan appears in Changes, with Apply |
+| Remove from every file | `propose_changes` with `query.tags`. The plan appears in Changes |
+| Retire, Activate | `list_vocabulary`, `set_vocabulary`, for values of open facets |
 
 ## Review queue
 
@@ -354,20 +464,21 @@ config key needs no UI code.
 | `string` with `enum` | Select |
 | `string` | Text input |
 | `array` of strings | Chip input |
-| `array` of objects, such as `pipeline` | Read only, with "Edit in the config file" |
+| `array` of objects, such as `pipeline`, and tables with free keys, such as `profiles` | JSON text, parsed as you type and validated by `set_config` on save. A profile cannot be deleted here, since `set_config` merges tables |
 | `description` | Help text under the control |
 
 Save sends the changed keys to `set_config`. A validation error comes back as `{ ok: false, error }`
 and shows above the form. See [configuration.md](configuration.md).
 
-Four sections do not come from the schema:
+Five sections do not come from the schema:
 
 | Section | Content |
 | --- | --- |
-| Keys | One row per provider, showing present or missing from `status`. Replace calls `set_api_key`. A key is never shown |
-| Libraries | `list_libraries`, `add_library`, `remove_library`. Removing clears the index only. Tags stay |
+| Keys | One row per provider from `list_keys`, showing where its key comes from. Save calls `set_api_key` and Remove calls `remove_api_key`. A switch calls `set_env_keys`. A key is never shown |
+| Libraries | `list_libraries`, `add_library` then `scan`, `scan` per row, `remove_library`. Removing clears the index only. Tags stay |
 | Agents | The MCP command with a Copy button. See [llm-native.md](llm-native.md#connecting-a-client) |
-| Appearance | Density and UI scale, kept in `localStorage`. They are per window and are not config |
+| Appearance | [Theme](#theme), density and UI scale for every screen, kept in `localStorage`. They are per window and are not config. File list sizes are in the `[view]` config |
+| Health | `doctor`, with Check again, and the paths from `get_config` |
 
 ## Chat panel
 
@@ -417,8 +528,8 @@ chat.
 | Plan `applied` | `✓` | The same, plus any `errors` count | Undo, Copy as CLI |
 | Plan `undone` | `↶` | The same | Copy as CLI |
 | Plan `failed` | `✕` | `errors`, by file | Copy as CLI |
-| Job running | `⟳` | `done` of `total`, `current`, `tokens`, `cost_usd` | Cancel (`cancel_job`) |
-| Job `done` | `✓` | Counts and time. An `organize` job links to its plan | |
+| Job running | `⟳` | Progress bar, percent, `done` of `total`, `tokens`, `cost_usd`, time left, `current`. A scan has no known total, so its bar only shows activity | Cancel (`cancel_job`) |
+| Job `done` | `✓` | Counts, what a scan found, failures and `warnings`. An `organize` job links to its plan | |
 | Job `failed`, `cancelled` | `✕` | `error` | |
 | Chat tool call | `✓` | The tool's output, truncated | |
 
@@ -426,7 +537,8 @@ chat.
 - Apply is always `Mod+Enter` or a click. Plain `Enter` never applies.
 - "Copy as CLI" copies the equivalent command, such as `jevonganize apply 7f3a9c21`. This teaches
   people and agents the CLI.
-- `screen=activity` lists blocks from `list_plans`, newest first, plus running jobs.
+- `screen=activity` lists blocks from `list_plans` and the server's recent jobs, newest first. A
+  status filter narrows it to plans of that status, like `plans --status`.
 - Blocks use `summary`, so a plan of 100,000 ops renders without walking them.
 
 ## Command palette
@@ -469,7 +581,7 @@ combinations each browser lets a page override was not verified.
 | | `Mod+Z` | Undo the last applied plan |
 | | `Mod+S` | Save the open form |
 | | `?` | Shortcut sheet |
-| | `g` then `b`, `r`, `f`, `s`, `a` | Go to browser, review, facets, settings, activity |
+| | `g` then `b`, `o`, `r`, `t`, `f`, `a`, `s` | Go to files, organize, review, tags, facets, activity, settings |
 | | `Esc` | Close the overlay, or clear the filter |
 | File list | `j` `k` or arrows | Move |
 | | `h` `l` or arrows | Move left and right in the grid |
@@ -478,9 +590,12 @@ combinations each browser lets a page override was not verified.
 | | `Mod+Enter` | Reveal in the file manager |
 | | `x` | Toggle selection |
 | | `Mod+A` | Select all in the query |
-| | `t` | Tag the selection |
+| | `t` / `Shift+T` | Tag the selection / remove a tag from it |
+| | `m` | Switch between any tag and all tags |
 | | `/` | Focus the filter |
 | | `v` | Switch grid and list |
+| | `Mod+J` | View options |
+| | `Mod+Shift+.` | Show or hide dotfiles |
 | Review | `j` `k` | Next and previous item |
 | | `[` `]` | Previous and next group |
 | | `a` / `r` / `s` | Accept / reject / skip |
@@ -496,7 +611,7 @@ One component per idea. If a view needs a variant, add a prop. Do not add a seco
 | Component | Used by | Rule |
 | --- | --- | --- |
 | `FileList` | Browser, review groups, plan changes, similar files | The only way to show files. Props: rows or a `FileQuery`, `mode` (`grid`, `list`, `compact`), selection. It owns virtualisation, keyboard and ARIA |
-| `TagChip` | Everywhere a tag appears | The only way to show a tag. Facet prefix in `--text-2`, label in `--text`. Optional `count`, `confidence`, `onRemove`. Renders text through React, so a hostile tag stays text |
+| `TagChip` | Everywhere a tag appears | The only way to show a tag. Tinted in the tag's colour, from `tag_colors`: its own, else its facet's, else an automatic one from the facet name. Facet prefix in `--text-2`. Optional `count`, `confidence`, `onRemove`. Renders text through React, so a hostile tag stays text |
 | `Block` | Activity, review, chat | The only way to show a job, plan or tool result |
 | `Pane` | Every view | The only scroll container. It wraps a `Panel` from `react-resizable-panels` and owns title, actions, and empty, loading and error states |
 
@@ -514,16 +629,18 @@ Also:
 
 | Kind | How | Limits |
 | --- | --- | --- |
-| Images | `<img src="/thumb/:id?size=1024">`. An `<img>` runs no script, even for SVG | If `thumbnail()` gives nothing, show metadata |
+| Images, and any type below does not name | `<img src="/thumb/:id?size=1024">`, which also covers slides, sheets and mail. An `<img>` runs no script, even for SVG | If `thumbnail()` gives nothing, show metadata |
 | PDF | `pdfjs-dist` on `/file/:id`, using range requests | Render visible pages only. Worker and library must be the same version |
 | Word (`.docx`) | `mammoth` turns the bytes from `/file/:id` into HTML, shown in `<iframe sandbox="">` through `srcdoc` | Skip above `budget.max_parse_mb` |
-| Text, including `text/html` and source code | First 256 KiB through a range request, as text in `<pre>`. HTML is shown as source and never rendered | Decoded as UTF-8, with a note if cut off |
+| HTML | The bytes from `/file/:id` in `Frame`, an `<iframe sandbox="">` through `srcdoc`. `Page` and `Source` switch between it and the text view. See [security.md](security.md#serving-originals) | First 16 MiB, in the charset the page declares |
+| Audio and video | The browser's own player on `/file/:id` | A type the browser cannot play shows metadata |
+| Text and source code | First 256 KiB through a range request, as text in `<pre>` | Decoded as UTF-8, with a note if cut off |
 | Anything else | Metadata only: `metadata`, extracted facts, and Reveal | |
 
 - `pdfjs-dist` and `mammoth` load through dynamic `import()`, so they cost nothing until used.
 - `FileRow` holds no thumbnail key, so thumbnail URLs add `&v=<mtime_ms>`. A changed file then gets a
   fresh URL under the immutable cache.
-- Audio, video, spreadsheets and presentations show metadata in v1.
+- The inspector's preview takes about half the window, and its button or `Space` opens a large one.
 - Rendering rules for hostile content are in [security.md](security.md#serving-originals).
 
 ## 100k files
@@ -540,14 +657,37 @@ with synthetic data before building on it.
 - Thumbnails load lazily by URL and are generated on first view.
 - Selection is a set of ids, or "all in query". Never expand "all" to ids in the browser.
 
+## CLI and UI parity
+
+Everything the CLI does has a place here. A new tool needs one too: `test/tools.test.ts` fails if a
+tool's name does not appear in `web/`.
+
+| CLI | UI |
+| --- | --- |
+| `setup` | [Onboarding](#onboarding) |
+| `scan` | Scan in the browser toolbar, on Organize and in Settings > Libraries |
+| `organize` | [Organize](#organize) |
+| `plans`, `apply`, `undo` | Activity, with its status filter, and the plan [block](#blocks) |
+| `tags list`, `tags rename` | [Tags](#tags) |
+| `tags add`, `tags remove` | `t` and `Shift+T` on a selection, and the inspector. Tags can remove a tag everywhere |
+| `search`, `show`, `similar` | [Browser](#browser) and inspector |
+| `review`, `cleanup` | [Review queue](#review-queue) |
+| `suggest` | The spark in the inspector's Tags section |
+| `facets` | [Facets editor](#facets-editor) |
+| `config get`, `config set`, `config edit` | [Settings](#settings) |
+| `config path`, `doctor` | Settings > Health |
+| `auth` | Settings > Keys |
+| `ask` | [Chat panel](#chat-panel) |
+| `mcp` | Settings > Agents shows how to connect a client. The client starts the server |
+
 ## Accessibility
 
 | Area | Rule |
 | --- | --- |
-| Contrast | All text passes 4.5:1 on all four surfaces. The tightest pair is `--text-3` on `--surface-3`, at 4.67. `--accent`, `--ok`, `--warn`, `--err` and `--border-control` pass 3:1 on all surfaces, computed with the WCAG formula. `--border` is decorative. Anything a user must see uses `--border-control` |
+| Contrast | In both themes, all text passes 4.5:1 on all four surfaces. The tightest dark pair is `--text-3` on `--surface-3`, at 4.67, and the tightest light one is `--err` on `--surface-3`, at 4.64. `--accent`, `--ok`, `--warn`, `--err` and `--border-control` pass 3:1 on all surfaces, computed with the WCAG formula. `--border` is decorative. Anything a user must see uses `--border-control` |
 | Focus | 2 px solid outline. Overlays return focus when they close |
 | Virtual grid | `role="grid"`, roving `tabindex`, `aria-rowcount` and `aria-rowindex`, because most rows are not in the DOM |
-| Live updates | Job progress goes through one polite `aria-live` region, throttled |
+| Live updates | The end of a job goes through one polite `aria-live` region. Bars are native `<progress>` |
 | Status | Every status has an icon and text, never colour alone |
 | Motion | `prefers-reduced-motion` is handled globally |
 | Contrast setting | `prefers-contrast: more` raises borders and secondary text |
@@ -567,20 +707,26 @@ src/web/
 ├── tokens.css          Tokens and the Tailwind binding
 ├── components/
 │   ├── ui/             Copied shadcn primitives
-│   ├── file-list.tsx
+│   ├── file-list.tsx   The list, with its state in file-list-state.ts
+│   ├── file-row.tsx    A tile, a line and the column heads
+│   ├── file-icon.tsx
 │   ├── tag-chip.tsx
 │   ├── block.tsx
 │   ├── pane.tsx
+│   ├── filters.tsx     The tab's filters and the any/all switch
+│   ├── send-notice.tsx What a run sends and costs
 │   ├── palette.tsx
 │   ├── folder-picker.tsx
 │   └── preview/        index.tsx, pdf.tsx, word.tsx, text.tsx
 └── views/
-    ├── onboarding.tsx
-    ├── browse.tsx      Sidebar, list, inspector
-    ├── inspector.tsx
+    ├── onboarding.tsx  State, with the steps in onboarding-steps.tsx
+    ├── browse.tsx      Panes, with browse-sidebar.tsx, browse-toolbar.tsx, browse-dialogs.tsx
+    ├── inspector.tsx   Selection and folders, with the file in inspector-file.tsx
+    ├── organize.tsx
     ├── review.tsx
-    ├── facets.tsx
-    ├── settings.tsx    Includes the schema form
+    ├── tags.tsx
+    ├── facets.tsx      The list, with the editor in facets-form.tsx
+    ├── settings.tsx    The shell, with settings-form.tsx and settings-sections.tsx
     ├── activity.tsx
     └── chat.tsx
 ```

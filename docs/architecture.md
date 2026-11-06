@@ -10,6 +10,11 @@ disagree, one of them has a bug. The reasoning behind each choice, with evidence
 
 ## Principles
 
+Human-facing translations live with their interface: `web/i18n/` for the browser/desktop UI and
+`commands/i18n/` for terminal output. They use the same `language` config, without making the browser
+import core runtime code or making engines depend on an interface. Catalog keys and named parameters
+are checked by TypeScript; user data is only interpolated, never translated by matching its text.
+
 1. **Tags on disk are the truth.** The database is an index of them. Delete it and tags survive.
 2. **One operation, one definition.** Every operation is one entry in a tool table. The CLI, the
    HTTP API, the chat panel and the MCP server all call that entry.
@@ -91,16 +96,30 @@ jevonganize/
 │   │   ├── credentials.ts  API keys in a 0600 file
 │   │   ├── sanitize.ts   Safe printing of untrusted text
 │   │   ├── tags.ts       readTags, writeTags, supported: the OS boundary
-│   │   ├── db.ts         All SQL, including similarity
+│   │   ├── db.ts         openDb: the one handle to the index
+│   │   ├── db/           All SQL, including similarity, one file per concern
 │   │   ├── scan.ts       Walk, fingerprint, mirror tags
+│   │   ├── exclusions.ts What is never read: secrets, app folders, `exclude`
 │   │   ├── watch.ts      fs.watch to scan
-│   │   ├── facets.ts     Load presets, map facets to questions, resolve answers
+│   │   ├── facets.ts     Load presets, map facets to questions
+│   │   ├── facet-answers.ts Check, derive and resolve answers
 │   │   ├── organize.ts   The organize flow
+│   │   ├── content-hash.ts A file's content hash
+│   │   ├── estimate.ts   What an organize run would cost
 │   │   ├── plans.ts      Propose, apply, undo
-│   │   └── tools.ts      The tool table
+│   │   ├── plan-conflicts.ts Whether an organize op still holds
+│   │   ├── tools.ts      The tool table
+│   │   └── tools/        Its rows by concern, jobs and watching
 │   ├── extract/
 │   │   ├── index.ts      Runs the pipeline for a file, in a worker pool
-│   │   ├── extractors.ts Extractor table, one entry per format family
+│   │   ├── extractors.ts Sniffing and the extractor table
+│   │   ├── source.ts     What extractors share: signature, state writes, ranged reads
+│   │   ├── pdf.ts        PDF text, metadata and page renders
+│   │   ├── office.ts     Office documents, and soffice for legacy ones
+│   │   ├── images.ts     Decoding, normalized images, EXIF, screenshots
+│   │   ├── mail.ts       .eml and .msg
+│   │   ├── media.ts      Audio and video tags, ffmpeg frames
+│   │   ├── tools.ts      Optional programs: ffmpeg, soffice
 │   │   ├── worker.ts     Worker entry
 │   │   └── thumbs.ts     Thumbnail cache
 │   ├── ai/               The only folder that imports `ai` or `@ai-sdk/*`
@@ -130,17 +149,17 @@ Dependencies point downward only. `.oxlintrc.json` enforces this, so a violation
 | Layer | Modules | May use |
 | --- | --- | --- |
 | Interface | `cli.ts`, `commands/`, `mcp.ts`, `server/`, `desktop/`, `web/` | The tool table, types, `config.ts`, `credentials.ts`, `ai/chat.ts`. `web/` uses types only |
-| Tools | `core/tools.ts` | Everything below |
-| Flows | `core/organize.ts`, `core/plans.ts`, `core/scan.ts`, `core/watch.ts` | Everything below |
-| Engines | `extract/`, `ai/`, `core/facets.ts` | Infrastructure, types |
-| Infrastructure | `core/config.ts`, `core/credentials.ts`, `core/db.ts`, `core/tags.ts`, `core/sanitize.ts` | Types |
+| Tools | `core/tools.ts`, `core/tools/` | Everything below |
+| Flows | `core/organize.ts`, `core/estimate.ts`, `core/plans.ts`, `core/plan-conflicts.ts`, `core/scan.ts`, `core/exclusions.ts`, `core/content-hash.ts`, `core/watch.ts` | Everything below |
+| Engines | `extract/`, `ai/`, `core/facets.ts`, `core/facet-answers.ts` | Infrastructure, types |
+| Infrastructure | `core/config.ts`, `core/credentials.ts`, `core/db.ts`, `core/db/`, `core/tags.ts`, `core/sanitize.ts` | Types |
 | Contracts | `types.ts` | Nothing |
 
 Rules that keep this honest:
 
 - `web/` imports only types from outside itself, and talks to the server over HTTP.
 - `core/tags.ts` is the only module that touches xattrs or NTFS streams.
-- `core/db.ts` is the only module that contains SQL.
+- `core/db.ts` and `core/db/` are the only modules that contain SQL.
 - `ai/` is the only folder that imports the AI SDK. Its decision API is experimental, so a breaking
   change must stay in one folder. Versions are pinned exactly.
 - `extract/` is the only module that parses file contents, and it does so in workers.

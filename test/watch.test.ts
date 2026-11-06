@@ -99,7 +99,9 @@ describe('watchLibrary', () => {
     await settled(() => expect(db.fileByPath(join(root, 'marker.txt'))).toBeDefined());
     expect(db.fileByPath(join(root, '.env'))).toBeUndefined();
   });
+});
 
+describe('watchLibrary walks and stops', () => {
   it('walks again every walk_minutes, which catches what events miss', async () => {
     config = configSchema.parse({ watch: { walk_minutes: 0.002 } }); // 120 ms
     start();

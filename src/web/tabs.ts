@@ -81,12 +81,16 @@ export const useView = (): View => parseView(useTabs((s) => activeTab(s).query))
 /** Files picked in the list: a set of ids, or everything the query matches. */
 export type Selection = { ids: Set<number>; all: boolean };
 
-type Overlay = 'palette' | 'shortcuts' | 'tag' | 'preview' | null;
+type Overlay = 'palette' | 'shortcuts' | 'tag' | 'untag' | 'preview' | null;
+
+/** `system` follows the OS, and keeps following it while the app is open. */
+export type Theme = 'system' | 'light' | 'dark';
 
 type Window = {
   sidebar: boolean;
   inspector: boolean;
   chat: boolean;
+  theme: Theme;
   density: 'comfortable' | 'compact';
   scale: number;
   skipped: boolean;
@@ -108,6 +112,7 @@ export const useWindow = create<Window>()(
       sidebar: true,
       inspector: true,
       chat: false,
+      theme: 'system',
       density: 'comfortable',
       scale: 1,
       skipped: false,
@@ -121,9 +126,10 @@ export const useWindow = create<Window>()(
     }),
     {
       name: 'jev-window',
-      partialize: ({ sidebar, inspector, density, scale, skipped, recent }) => ({
+      partialize: ({ sidebar, inspector, theme, density, scale, skipped, recent }) => ({
         sidebar,
         inspector,
+        theme,
         density,
         scale,
         skipped,
@@ -132,6 +138,13 @@ export const useWindow = create<Window>()(
     },
   ),
 );
+
+const paintTheme = ({ theme }: Window) => {
+  document.documentElement.dataset.theme = theme;
+};
+// At import, so the first paint already has it.
+paintTheme(useWindow.getState());
+useWindow.subscribe(paintTheme);
 
 let clearing: ReturnType<typeof setTimeout>;
 

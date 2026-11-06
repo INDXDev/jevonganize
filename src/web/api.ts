@@ -1,8 +1,12 @@
+import { t } from './i18n/index.ts';
 /** The UI's only door to the server: tool calls, events, and file URLs. */
 import { QueryClient, useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { FileRow, ServerEvent, Status, ToolMap, ToolName } from '../types.ts';
+import type { ViewOptions } from '../core/config.ts';
+import type { FileRow, Job, ServerEvent, Status, ToolMap, ToolName } from '../types.ts';
 import { notify } from './tabs.ts';
+import type { TagColors } from './tag-colors.ts';
+import { pathSep } from './view-query.ts';
 
 // The condition folds to false in a production build, which drops the mock from the bundle.
 const mock = import.meta.env.VITE_MOCK === '1' ? await import('./dev/mock.ts') : null;
@@ -26,7 +30,7 @@ export async function call<K extends ToolName>(
     | { ok: true; data: ToolMap[K][1] }
     | { ok: false; error: string }
     | null;
-  if (!body) throw new Error(`Server error ${res.status}`);
+  if (!body) throw new Error(t('Server error {status}', { status: res.status }));
   if (!body.ok) throw new Error(body.error);
   return body.data;
 }
@@ -42,6 +46,44 @@ export function useTool<K extends ToolName>(
     queryFn: () => call(tool, input),
     ...options,
   });
+}
+
+/** The `tag_colors` config. Every chip reads it, so it never refetches on its own. */
+export function useTagColors() {
+  const { data } = useTool('get_config', {}, { staleTime: Infinity });
+  return data?.config.tag_colors as TagColors | undefined;
+}
+
+type LoadedConfig = ToolMap['get_config'][1];
+
+/** The `[view]` config. The shell waits for it, so views can rely on it. */
+export const viewOptions = () =>
+  queryClient.getQueryData<LoadedConfig>(['get_config', {}])?.config.view as ViewOptions;
+
+export function useViewOptions() {
+  const { data } = useTool('get_config', {}, { staleTime: Infinity });
+  return data?.config.view as ViewOptions;
+}
+
+/** Shows a change at once, without saving it: for a slider while it is being dragged. */
+export const previewView = (change: Partial<ViewOptions>) =>
+  queryClient.setQueryData<LoadedConfig>(
+    ['get_config', {}],
+    (data) =>
+      data && { ...data, config: { ...data.config, view: { ...viewOptions(), ...change } } },
+  );
+
+let savingView: Promise<unknown> = Promise.resolve();
+
+/** Saves in order, and does not refetch: a late answer would undo a slider that has moved on. */
+export function saveView(change: Partial<ViewOptions>) {
+  previewView(change);
+  savingView = savingView
+    .then(() => call('set_config', { view: change }))
+    .catch((error: unknown) => {
+      notify((error as Error).message, true);
+      void queryClient.invalidateQueries({ queryKey: ['get_config'] });
+    });
 }
 
 /** A write from a button or key: refreshes what is on screen, and reports failure in the status bar. */
@@ -61,7 +103,7 @@ export async function act<K extends ToolName>(
 
 /** A direct tag edit by a person: the change is its own approval, so it applies at once. */
 export async function editTags(fileId: number, change: { add?: string[]; remove?: string[] }) {
-  const title = `Edit tags on file ${fileId}`;
+  const title = t('Edit tags on file {id}', { id: fileId });
   const plan = await act('propose_changes', { file_ids: [fileId], ...change, title });
   if (plan) await act('apply_plan', { id: plan.id });
 }
@@ -71,6 +113,46 @@ export async function resolveReviews(ids: number[], accept: boolean) {
   const plan = await act('resolve_reviews', { ids, accept });
   if (plan?.status === 'proposed') await act('apply_plan', { id: plan.id });
 }
+
+/** Organize runs that asked to apply their plan, the UI's `--apply`. Kept for this window only. */
+const applyWhenReady = new Set<string>();
+
+function applyIfAsked(job: Job) {
+  const whole = !job.failed || job.failed < job.total; // a run where every file failed has no plan
+  if (job.status === 'done' && job.plan_id && applyWhenReady.delete(job.id) && whole) {
+    void act('apply_plan', { id: job.plan_id });
+  }
+}
+
+/** Starts an organize job. A refusal, such as no key, throws for the form to show. */
+export async function organize(input: ToolMap['organize'][0], apply: boolean) {
+  const job = await call('organize', input);
+  if (apply) applyWhenReady.add(job.id);
+  // A short run can end before this answer arrives, with its last event already seen.
+  const seen = queryClient.getQueryData<Status>(['status', {}])?.jobs.find((j) => j.id === job.id);
+  applyIfAsked(seen ?? job);
+  void queryClient.invalidateQueries({ queryKey: ['status'] });
+  return job;
+}
+
+/** Scans the library that holds `folder`, or every library. `scan` takes only a library's root. */
+export async function scanFolder(folder?: string) {
+  const libraries = await call('list_libraries', {});
+  const holds = (root: string) =>
+    folder === root ||
+    folder?.startsWith(root.endsWith(pathSep(root)) ? root : root + pathSep(root));
+  return act('scan', { path: libraries.find((l) => holds(l.path))?.path });
+}
+
+const ended: Record<Job['kind'], (job: Job) => string> = {
+  scan: (job) => t('Scan finished: {count} files', { count: job.scan?.files ?? job.done }),
+  organize: (job) =>
+    job.plan_id
+      ? t('Organized {count} files. Its plan is ready', { count: job.done })
+      : t('Organized {count} files', { count: job.done }),
+  apply: (job) => t('Plan applied to {count} files', { count: job.done }),
+  undo: (job) => t('Plan undone on {count} files', { count: job.done }),
+};
 
 const invalidate = (...tools: ToolName[]) =>
   tools.forEach((tool) => void queryClient.invalidateQueries({ queryKey: [tool] }));
@@ -83,9 +165,22 @@ function onEvent(event: ServerEvent) {
       (status) =>
         status && { ...status, jobs: [job, ...status.jobs.filter((j) => j.id !== job.id)] },
     );
-    if (job.status !== 'running') invalidate('status', 'list_plans', 'list_libraries');
+    if (job.status === 'running') return;
+    invalidate(
+      'status',
+      'list_plans',
+      'list_libraries',
+      'list_folders',
+      'search_files',
+      'list_tags',
+      'list_reviews',
+    );
+    applyIfAsked(job);
+    if (job.status === 'done') notify(ended[job.kind](job));
+    if (job.status === 'failed')
+      notify(job.error ?? t('The {kind} job failed', { kind: t(job.kind) }), true);
   } else if (event.type === 'files') {
-    invalidate('search_files', 'list_tags', 'similar_files', 'status');
+    invalidate('search_files', 'list_folders', 'list_tags', 'similar_files', 'status');
     const ids = new Set(event.ids);
     void queryClient.invalidateQueries({
       queryKey: ['get_file'],

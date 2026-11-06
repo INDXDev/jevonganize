@@ -99,6 +99,36 @@ function failure(c: HonoContext, error: unknown): Response {
   return c.json({ ok: false, error: 'Internal error' }, 500);
 }
 
+/** The routes that serve a file's bytes or thumbnail, by id. */
+function addFileRoutes(app: Hono, ctx: Context): void {
+  app.get('/thumb/:id', async (c) => {
+    const size = c.req.query('size') === '1024' ? 1024 : 256;
+    const path = await thumbnailFile(ctx, fileId(c), size);
+    if (!path) return c.text('Not found', 404);
+    return new Response(await readFile(path), {
+      headers: {
+        'content-type': 'image/webp',
+        'cache-control': `private, max-age=${THUMB_MAX_AGE}, immutable`,
+      },
+    });
+  });
+
+  app.get('/file/:id', async (c) => {
+    const file = servableFile(ctx, fileId(c));
+    return file ? sendFile(c, file.path, file.mime) : c.text('Not found', 404);
+  });
+}
+
+function addUiRoutes(app: Hono): void {
+  const root = webRoot();
+  if (root) {
+    app.use('*', serveStatic({ root }));
+    app.get('*', serveStatic({ root, path: 'index.html' })); // the UI routes on the client
+  } else {
+    app.get('*', (c) => c.text('The UI is not built. Run: pnpm build', 404));
+  }
+}
+
 /** Builds the app for one launch. `ctx.emit` should feed the returned `publish`. */
 export function createApp(ctx: Context, port: number, token: string) {
   const listeners = new Set<(event: ServerEvent) => void>();
@@ -153,30 +183,8 @@ export function createApp(ctx: Context, port: number, token: string) {
     }
   });
 
-  app.get('/thumb/:id', async (c) => {
-    const size = c.req.query('size') === '1024' ? 1024 : 256;
-    const path = await thumbnailFile(ctx, fileId(c), size);
-    if (!path) return c.text('Not found', 404);
-    return new Response(await readFile(path), {
-      headers: {
-        'content-type': 'image/webp',
-        'cache-control': `private, max-age=${THUMB_MAX_AGE}, immutable`,
-      },
-    });
-  });
-
-  app.get('/file/:id', async (c) => {
-    const file = servableFile(ctx, fileId(c));
-    return file ? sendFile(c, file.path, file.mime) : c.text('Not found', 404);
-  });
-
-  const root = webRoot();
-  if (root) {
-    app.use('*', serveStatic({ root }));
-    app.get('*', serveStatic({ root, path: 'index.html' })); // the UI routes on the client
-  } else {
-    app.get('*', (c) => c.text('The UI is not built. Run: pnpm build', 404));
-  }
+  addFileRoutes(app, ctx);
+  addUiRoutes(app);
 
   return { app, publish: (event: ServerEvent) => listeners.forEach((send) => send(event)) };
 }

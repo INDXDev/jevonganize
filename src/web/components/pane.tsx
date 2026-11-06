@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.ts';
 import { CircleAlert, LoaderCircle } from 'lucide-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
@@ -34,7 +35,7 @@ export function Pane(props: Props) {
   const state = error ? (
     <Notice icon={<CircleAlert className="size-4 text-destructive" />}>{error.message}</Notice>
   ) : loading ? (
-    <Notice icon={<LoaderCircle className="spin size-4" />}>Loading</Notice>
+    <Notice icon={<LoaderCircle className="spin size-4" />}>{t('Loading')}</Notice>
   ) : empty ? (
     <Notice>{empty}</Notice>
   ) : null;

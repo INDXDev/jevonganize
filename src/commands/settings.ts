@@ -1,4 +1,5 @@
 /** Commands over settings: facets, config, auth, doctor. */
+import { t, keySourceLabel } from './i18n/index.ts';
 import { spawnSync } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
 import { confirm, isCancel, password } from '@clack/prompts';
@@ -9,6 +10,7 @@ import {
   configSchema,
   ifExists,
   isTable,
+  locations,
   parseToml,
   parseWith,
   paths,
@@ -16,14 +18,7 @@ import {
   UserError,
   writeFileAtomic,
 } from '../core/config.ts';
-import {
-  envKeysAllowed,
-  envKeyUnanswered,
-  KEY_ENV,
-  keySource,
-  removeApiKey,
-  setEnvKeysAllowed,
-} from '../core/credentials.ts';
+import { envKeyUnanswered, KEY_ENV, setEnvKeysAllowed } from '../core/credentials.ts';
 import { sanitizeLine } from '../core/sanitize.ts';
 import { callTool } from '../core/tools.ts';
 import type { FacetInfo, ProviderName } from '../types.ts';
@@ -34,8 +29,14 @@ const prompt = { output: process.stderr };
 /** Asks once, in a terminal, whether a key in the environment may be used. The default is no. */
 export async function askEnvConsent(provider: ProviderName): Promise<void> {
   if (!process.stdin.isTTY || !(await envKeyUnanswered(provider))) return;
-  const message = `${KEY_ENV[provider]} is set. Use keys from the environment?`;
-  const answer = await confirm({ ...prompt, message, initialValue: false });
+  const message = t('{key} is set. Use keys from the environment?', { key: KEY_ENV[provider] });
+  const answer = await confirm({
+    ...prompt,
+    message,
+    initialValue: false,
+    active: t('Yes'),
+    inactive: t('No'),
+  });
   await setEnvKeysAllowed(answer === true);
 }
 
@@ -51,7 +52,8 @@ export async function readKey(label: string): Promise<string> {
 }
 
 function providerNamed(name: string): ProviderName {
-  if (!Object.hasOwn(KEY_ENV, name)) throw new UserError(`There is no provider named "${name}"`);
+  if (!Object.hasOwn(KEY_ENV, name))
+    throw new UserError(t('There is no provider named "{name}"', { name }));
   return name as ProviderName;
 }
 
@@ -66,14 +68,21 @@ function printFacets(facets: FacetInfo[]): void {
 async function showFacet(id: string, flags: JsonFlag): Promise<void> {
   await withContext(flags, async (ctx) => {
     const facet = (await callTool('list_facets', {}, ctx)).find((entry) => entry.id === id);
-    if (!facet) throw new UserError(`There is no facet named "${id}"`);
+    if (!facet) throw new UserError(t('There is no facet named "{id}"', { id }));
     if (flags.json) return outJson(facet);
-    out(`${facet.id}  (${facet.kind}, pack ${facet.pack}${facet.enabled ? ', enabled' : ''})`);
+    out(
+      t('{id}  ({kind}, pack {pack}{enabled})', {
+        id: facet.id,
+        kind: facet.kind,
+        pack: facet.pack,
+        enabled: facet.enabled ? t(', enabled') : '',
+      }),
+    );
     if (facet.instructions) out(facet.instructions);
     for (const [label, meaning] of Object.entries(facet.values ?? {}))
       out(`  ${label}: ${meaning}`);
-    if (facet.levels) out(`Levels: ${facet.levels.join(', ')}`);
-    return out(`Applies to: ${facet.applies_to.join(', ') || 'every file'}`);
+    if (facet.levels) out(t('Levels: {levels}', { levels: facet.levels.join(', ') }));
+    return out(t('Applies to: {types}', { types: facet.applies_to.join(', ') || t('every file') }));
   });
 }
 
@@ -81,7 +90,9 @@ const setFacets = (enabled: boolean) => async (ids: string[], flags: JsonFlag) =
   await withContext(flags, async (ctx) => {
     await callTool('set_enabled', { ids, enabled }, ctx);
     if (flags.json) return outJson(null);
-    return out(`${enabled ? 'Enabled' : 'Disabled'} ${ids.map(sanitizeLine).join(', ')}.`);
+    return out(
+      t(enabled ? 'Enabled {ids}.' : 'Disabled {ids}.', { ids: ids.map(sanitizeLine).join(', ') }),
+    );
   });
 };
 
@@ -89,7 +100,7 @@ function pick(config: Record<string, unknown>, key: string): unknown {
   let value: unknown = config;
   for (const part of key.split('.')) {
     if (!isTable(value) || !Object.hasOwn(value, part)) {
-      throw new UserError(`There is no config key "${key}"`);
+      throw new UserError(t('There is no config key "{key}"', { key }));
     }
     value = value[part];
   }
@@ -138,7 +149,8 @@ async function configEdit(): Promise<void> {
   await writeFileAtomic(draft, (await ifExists(readRegularFile(file))) ?? '');
   // No shell. An $EDITOR with arguments is split on spaces.
   const { status, error } = spawnSync(editor ?? fallback, [...args, draft], { stdio: 'inherit' });
-  if (error || status !== 0) throw new UserError(`The editor did not finish. ${draft} is kept`);
+  if (error || status !== 0)
+    throw new UserError(t('The editor did not finish. {draft} is kept', { draft }));
   const text = await readFile(draft, 'utf8');
   parseWith(configSchema, parseToml(text, draft), draft);
   await writeFileAtomic(file, text);
@@ -146,15 +158,12 @@ async function configEdit(): Promise<void> {
 }
 
 async function authList(flags: JsonFlag) {
-  const rows = await Promise.all(
-    Object.keys(KEY_ENV).map(async (name) => ({
-      provider: name,
-      source: await keySource(name as ProviderName),
-    })),
-  );
-  if (flags.json) return outJson(rows);
-  for (const row of rows) out(`${row.provider.padEnd(12)}${row.source ?? 'none'}`);
-  return undefined;
+  await withContext(flags, async (ctx) => {
+    const { keys } = await callTool('list_keys', {}, ctx);
+    if (flags.json) return outJson(keys);
+    for (const row of keys) out(`${row.provider.padEnd(12)}${keySourceLabel(row.source)}`);
+    return undefined;
+  });
 }
 
 async function runDoctor(flags: JsonFlag) {
@@ -163,7 +172,7 @@ async function runDoctor(flags: JsonFlag) {
     if (checks.some((check) => !check.ok)) process.exitCode = 1;
     if (flags.json) return outJson(checks);
     for (const { name, ok, detail } of checks) {
-      const label = (name.startsWith('optional:') ? 'note' : ok ? 'ok' : 'FAIL').padEnd(6);
+      const label = t(name.startsWith('optional:') ? 'note' : ok ? 'ok' : 'FAIL').padEnd(6);
       const colour = ok ? pc.green : pc.red;
       const text = name === 'volume' ? shown(detail) : sanitizeLine(detail);
       out(`${colour(label)}${text}`);
@@ -172,66 +181,80 @@ async function runDoctor(flags: JsonFlag) {
   });
 }
 
-/** Adds the commands of this file. */
-export function addSettingsCommands(program: Command): void {
-  const facets = program.command('facets').description('List and enable facets');
-  command(facets, 'list', 'Packs and facets, with * on enabled ones').action(
+function addFacetCommands(program: Command): void {
+  const facets = program.command('facets').description(t('List and enable facets'));
+  command(facets, 'list', t('Packs and facets, with * on enabled ones')).action(
     async (flags: JsonFlag) =>
       withContext(flags, async (ctx) => {
         const all = await callTool('list_facets', {}, ctx);
         return flags.json ? outJson(all) : printFacets(all);
       }),
   );
-  command(facets, 'show <id>', 'One facet').action(showFacet);
-  command(facets, 'enable <ids...>', 'Enable packs or facets').action(setFacets(true));
-  command(facets, 'disable <ids...>', 'Disable packs or facets').action(setFacets(false));
+  command(facets, 'show <id>', t('One facet')).action(showFacet);
+  command(facets, 'enable <ids...>', t('Enable packs or facets')).action(setFacets(true));
+  command(facets, 'disable <ids...>', t('Disable packs or facets')).action(setFacets(false));
+}
 
-  const config = program.command('config').description('Read and change the config');
-  command(config, 'get [key]', 'Print the config, or one key').action(configGet);
-  command(config, 'set <key> <value>', 'Validate and save one key').action(configSet);
-  command(config, 'path', 'Print the config, data and cache paths').action((flags: JsonFlag) => {
-    const all = {
-      config: paths.configFile(),
-      data: paths.database(),
-      cache: paths.thumbnails(),
-    };
+function addConfigCommands(program: Command): void {
+  const config = program.command('config').description(t('Read and change the config'));
+  command(config, 'get [key]', t('Print the config, or one key')).action(configGet);
+  command(config, 'set <key> <value>', t('Validate and save one key')).action(configSet);
+  command(config, 'path', t('Print the config, data and cache paths')).action((flags: JsonFlag) => {
+    const all = locations();
     if (flags.json) return outJson(all);
     return Object.values(all).forEach((path) => out(path));
   });
-  command(config, 'edit', 'Open the config in $VISUAL or $EDITOR, then validate').action(
+  command(config, 'edit', t('Open the config in $VISUAL or $EDITOR, then validate')).action(
     configEdit,
   );
+}
 
-  const auth = program.command('auth').description('Manage API keys');
-  command(auth, 'set <provider>', 'Store a key. Pipe it in for scripts').action(
+function addAuthCommands(program: Command): void {
+  const auth = program.command('auth').description(t('Manage API keys'));
+  command(auth, 'set <provider>', t('Store a key. Pipe it in for scripts')).action(
     async (name: string, flags: JsonFlag) =>
       withContext(flags, async (ctx) => {
-        const key = await readKey(`${name} API key`);
+        const key = await readKey(t('{name} API key', { name }));
         await callTool('set_api_key', { provider: providerNamed(name), key }, ctx);
-        return flags.json ? outJson(null) : out(`Stored a key for ${sanitizeLine(name)}.`);
+        return flags.json
+          ? outJson(null)
+          : out(t('Stored a key for {name}.', { name: sanitizeLine(name) }));
       }),
   );
-  command(auth, 'list', 'Each provider and where its key comes from').action(authList);
-  command(auth, 'remove <provider>', 'Delete a stored key').action(
-    async (name: string, flags: JsonFlag) => {
-      const found = await removeApiKey(providerNamed(name));
-      if (flags.json) return outJson({ removed: found });
-      return out(
-        found ? `Removed the key for ${name}.` : `No key stored for ${sanitizeLine(name)}.`,
-      );
-    },
+  command(auth, 'list', t('Each provider and where its key comes from')).action(authList);
+  command(auth, 'remove <provider>', t('Delete a stored key')).action(
+    async (name: string, flags: JsonFlag) =>
+      withContext(flags, async (ctx) => {
+        const provider = providerNamed(name);
+        const { removed } = await callTool('remove_api_key', { provider }, ctx);
+        if (flags.json) return outJson({ removed });
+        return out(
+          t(removed ? 'Removed the key for {name}.' : 'No key stored for {name}.', {
+            name: sanitizeLine(name),
+          }),
+        );
+      }),
   );
-  command(auth, 'env <state>', 'Allow or refuse keys from the environment: on or off').action(
-    async (state: string, flags: JsonFlag) => {
-      if (state !== 'on' && state !== 'off')
-        throw new UserError('Use: auth env on, or auth env off');
-      await setEnvKeysAllowed(state === 'on');
-      const allowed = await envKeysAllowed();
-      return flags.json ? outJson({ allowed }) : out(`Environment keys are ${state}.`);
-    },
+  command(auth, 'env <state>', t('Allow or refuse keys from the environment: on or off')).action(
+    async (state: string, flags: JsonFlag) =>
+      withContext(flags, async (ctx) => {
+        if (state !== 'on' && state !== 'off')
+          throw new UserError(t('Use: auth env on, or auth env off'));
+        await callTool('set_env_keys', { allowed: state === 'on' }, ctx);
+        const { env_allowed: allowed } = await callTool('list_keys', {}, ctx);
+        return flags.json
+          ? outJson({ allowed })
+          : out(t(state === 'on' ? 'Environment keys are on.' : 'Environment keys are off.'));
+      }),
   );
+}
 
-  command(program, 'doctor', 'Check the runtime, key, volumes and optional tools').action(
+/** Adds the commands of this file. */
+export function addSettingsCommands(program: Command): void {
+  addFacetCommands(program);
+  addConfigCommands(program);
+  addAuthCommands(program);
+  command(program, 'doctor', t('Check the runtime, key, volumes and optional tools')).action(
     runDoctor,
   );
 }

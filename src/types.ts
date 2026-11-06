@@ -3,6 +3,9 @@
 /** A file's tags, as stored on disk: `facet:value`, or any plain string a person wrote. */
 export type Tag = string;
 
+/** A supported human-facing language, after resolving the system preference. */
+export type Language = 'en' | 'ja' | 'zh-CN';
+
 /** How a facet gets its value, and what its tag looks like. See docs/presets.md. */
 export type FacetKind =
   | 'flag' // yes or no. Present means yes
@@ -151,16 +154,29 @@ export interface FileQuery {
   text?: string;
   /** Folder prefix. */
   folder?: string;
-  /** All of these, matching children: `topic:finance` matches `topic:finance/tax`. */
+  /** These tags, matching children: `topic:finance` matches `topic:finance/tax`. */
   tags?: Tag[];
+  /** Whether a file needs `any` of `tags` or `all` of them. Default `all`. */
+  tag_match?: 'any' | 'all';
   /** None of these. */
   exclude_tags?: Tag[];
   mime?: string;
   status?: FileRow['status'];
-  sort?: 'name' | 'modified' | 'size' | 'relevance';
+  /** Leaves out names starting with a dot, and anything in such a folder under its library. */
+  hide_dotfiles?: boolean;
+  /** Only what sits directly in `folder`, not in its subfolders. */
+  direct_only?: boolean;
+  sort?: 'name' | 'kind' | 'modified' | 'size' | 'relevance';
   order?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
+}
+
+/** A folder directly under another, with every indexed file below it. */
+export interface FolderCount {
+  name: string;
+  path: string;
+  files: number;
 }
 
 export interface Library {
@@ -175,6 +191,8 @@ export interface Job {
   id: string;
   kind: 'scan' | 'organize' | 'apply' | 'undo';
   status: 'running' | 'done' | 'failed' | 'cancelled';
+  /** Milliseconds since the epoch, like `Plan.created_at`. */
+  started_at: number;
   done: number;
   total: number;
   /** The file being worked on. */
@@ -250,6 +268,20 @@ export interface Status {
   keys: ProviderName[];
 }
 
+/** What `list_keys` reports. Never the keys themselves. */
+export interface KeyList {
+  keys: { provider: ProviderName; source: 'env' | 'file' | null }[];
+  /** Whether keys from the environment are used. Null until someone has answered. */
+  env_allowed: boolean | null;
+}
+
+/** A value of an open facet. */
+export interface VocabularyEntry {
+  facet: string;
+  value: string;
+  state: 'proposed' | 'active' | 'retired';
+}
+
 /** What `cleanup_report` finds. */
 export interface CleanupReport {
   near_duplicates: { tags: Tag[]; files: number }[];
@@ -271,6 +303,7 @@ export interface ToolMap {
   get_file: [{ id?: number; path?: string }, FileDetail];
   similar_files: [{ id: number; limit?: number }, SimilarFile[]];
   list_tags: [{ folder?: string; facet?: string }, TagCount[]];
+  list_folders: [{ folder: string }, FolderCount[]];
   list_facets: [Record<string, never>, FacetInfo[]];
   save_facet: [Facet, Facet];
   delete_facet: [{ id: string }, void];
@@ -290,9 +323,21 @@ export interface ToolMap {
   suggest_tags: [{ id: number }, ReviewItem[]];
   set_vocabulary: [{ facet: string; value: string; state: 'active' | 'retired' }, void];
   cleanup_report: [Record<string, never>, CleanupReport];
-  get_config: [Record<string, never>, { config: Record<string, unknown>; schema: unknown }];
+  list_vocabulary: [{ facet?: string }, VocabularyEntry[]];
+  get_config: [
+    Record<string, never>,
+    {
+      config: Record<string, unknown>;
+      system_language: Language;
+      schema: unknown;
+      paths: { config: string; data: string; cache: string };
+    },
+  ];
   set_config: [Record<string, unknown>, Record<string, unknown>];
+  list_keys: [Record<string, never>, KeyList];
   set_api_key: [{ provider: ProviderName; key: string }, void];
+  remove_api_key: [{ provider: ProviderName }, { removed: boolean }];
+  set_env_keys: [{ allowed: boolean }, void];
   reveal_file: [{ id: number }, void];
   doctor: [Record<string, never>, Check[]];
 }
