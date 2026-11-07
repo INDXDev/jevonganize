@@ -26,8 +26,13 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  server.kill();
-  await rm(home, { recursive: true, force: true });
+  if (server.exitCode === null) {
+    const exited = new Promise((done) => server.once('exit', done));
+    server.kill();
+    await exited;
+  }
+  // Windows releases the index's files a moment after the process ends.
+  await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 /** Smoke test against the real server: the shell loads, and the palette and views respond. */
@@ -118,4 +123,32 @@ test('saved languages update the UI, survive reload, and follow this PC independ
   } finally {
     await context.close();
   }
+});
+
+test('a virtual folder is made from the sidebar and opens the file list on its rule', async ({
+  page,
+}) => {
+  await page.goto(authUrl);
+  // The test before may leave the language on this PC's, so pin English for the names below.
+  await page.evaluate(() =>
+    fetch('/api/call/set_config', { method: 'POST', body: JSON.stringify({ language: 'en' }) }),
+  );
+  await page.reload();
+  const skip = page.getByRole('button', { name: 'Skip for now' });
+  await expect(skip).toBeVisible();
+  await skip.click();
+
+  const section = page.locator('[data-tour="vfolders"]');
+  await expect(section).toBeVisible();
+  await section.getByRole('button', { name: 'New folder' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Name' }).fill('Taxes');
+  await dialog.getByRole('textbox', { name: 'Tags' }).fill('topic:finance');
+  await dialog.getByRole('textbox', { name: 'Tags' }).press('Enter');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+
+  await section.getByRole('button', { name: /^Taxes/ }).click();
+  await expect(page).toHaveURL(/vfolder=/);
+  await expect(page.getByRole('button', { name: 'Close the folder' })).toBeVisible();
 });

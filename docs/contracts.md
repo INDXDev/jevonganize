@@ -72,6 +72,12 @@ it, so neither imports the other.
 | `reveal_file` | `id` | `void`: shows it in the file manager | no | no |
 | `open_file` | `id` | `void`: opens it in its default app. Refuses executables, see [security.md](security.md#opening-a-file) | no | no |
 | `doctor` | none | checks: runtime, key, volumes, optional tools | no | yes |
+| `list_vfolders` | `generated?` | `VirtualFolderTree`: saved folders as a tree with counts, plus the generated tree when asked | no | yes |
+| `save_vfolder` | `id?`, `name`, `parent?`, `rule`, `tag?` | `VirtualFolder`. Stored state only, never a tag | yes | no |
+| `delete_vfolder` | `id` | `void`: the folder and those under it. Files and tags stay | yes | no |
+| `vfolder_files` | `id` or `generated`, paging and sort | `{ files: FileRow[], total, query }` through `search_files`, 50 rows unless `limit` says otherwise | no | yes |
+| `add_to_vfolder` | `id`, `file_ids` | `Plan` adding the folder's home tag, and its ancestors' | stores a plan | yes |
+| `remove_from_vfolder` | `id`, `file_ids` | `Plan` removing the folder's home tag | stores a plan | yes |
 
 `FileQuery.hide_dotfiles` leaves out names starting with a dot and anything in such a folder, counted
 from the library, so a library inside a dot folder still shows. `direct_only` keeps to what sits
@@ -81,6 +87,30 @@ directly in `folder`. Both default to off: only the UI sets them, from `[view]`.
 `all`, so a query only ever gets narrower unless it asks otherwise: a script or agent that repeats a
 tag keeps its meaning, and a plan built from a query cannot silently grow. The UI always says which it
 wants, and starts on `any`. `exclude_tags` is not affected: a file with any of them is out.
+
+`FileQuery.tag_groups` holds more tag conditions, each with its own `tag_match`, and a file must pass
+every one of them as well as `tags`. A tag in any of these lists that ends in `:`, such as `topic:`,
+stands for every tag in that namespace.
+
+A [virtual folder](concepts.md#virtual-folders) is a `FolderRule`: `tags`, `tag_match`,
+`exclude_tags` and an optional `folder`, which must be a library or a folder in one. It is a subset of
+`FileQuery`, so its files come from the `search_files` SQL and nothing else. A child narrows its
+parent: `vfolder_files` turns the folder and each ancestor into one `tag_groups` entry each, joins
+their `exclude_tags`, and uses the deepest `folder`. `save_vfolder` validates the rule with zod, and
+each read checks it again; a damaged row is left out of `list_vfolders`, with the folders under it,
+and can still be deleted. It refuses a cycle, a tree deeper than 8, a name already used beside it, a
+scope outside a library, and a scope that leaves an ancestor's or strands a child's. Left out,
+`tag_match` is `all`, the lists are empty, and `tag`, the home tag, is the rule's tag when it has
+exactly one that is not a whole namespace. Otherwise it is null, and nothing can be put in the folder.
+A generated folder is never stored: one per namespace, a child per value, nested by `/`, and a month
+under its year. Its key is the tag, or `<namespace>:`. Counts come from the search total cache, and a
+generated leaf uses its tag count, so listing stays fast on a large index.
+
+`add_to_vfolder` plans the home tag of the folder and of each ancestor that has one, so the file shows
+in the folder it was put in. `remove_from_vfolder` plans removing only the folder's own home tag; a
+file the rule still matches through another tag stays in it. Both are plans, so a person applies them
+with `apply_plan` and can undo them. Folder names and rules are a person's text, and are sanitized
+where they are printed like any other.
 
 Every tool has a place in the UI, which `test/tools.test.ts` checks. See
 [ui.md](ui.md#cli-and-ui-parity).
@@ -230,6 +260,15 @@ CREATE TABLE vocabulary (facet TEXT NOT NULL, value TEXT NOT NULL,
   state TEXT NOT NULL,                   -- proposed, active, retired
   PRIMARY KEY (facet, value));
 CREATE VIRTUAL TABLE content USING fts5(text, tokenize='trigram');   -- rowid = file.id
+CREATE TABLE vfolder (                   -- virtual folders: rules, never files
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+  parent INTEGER REFERENCES vfolder(id) ON DELETE CASCADE,
+  rule TEXT NOT NULL,                    -- JSON FolderRule, checked on write and on read
+  tag TEXT,                              -- the home tag, or null
+  created_at INTEGER NOT NULL,
+  UNIQUE (parent, name)
+);
+CREATE UNIQUE INDEX vfolder_root_name ON vfolder(name) WHERE parent IS NULL;
 ```
 
 The internal scan tag reader checks regular files again, reports each failure separately, and never
@@ -247,7 +286,8 @@ reuse the same total, while result rows are always selected afresh. Indexed name
 tag arrays. Similarity still ranks every candidate with the exact weighted formula.
 
 `PRAGMA user_version` holds the schema version. Migrations are a list of SQL strings applied in
-order. An index from a newer version is refused, never altered.
+order. An index from a newer version is refused, never altered. Schema version 5 adds `vfolder`.
+`delete_vfolder` deletes the subtree itself, as the connection does not turn on `foreign_keys`.
 
 **Answer key:** `sha256(provider, configured model, endpoint, facetHash, state_hash)`, where
 `state_hash` hashes what is sent, before the per-call delimiter marker is added. Changing the

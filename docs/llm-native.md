@@ -17,11 +17,11 @@ Tools with `agent: true` are offered to chat and MCP. Tools with `agent: false` 
 
 | Group | Tools |
 | --- | --- |
-| Read | `status`, `list_libraries`, `search_files`, `get_file`, `similar_files`, `list_tags`, `list_facets`, `list_vocabulary`, `search_catalog`, `estimate`, `get_plan`, `list_plans`, `list_reviews`, `cleanup_report`, `doctor` |
-| Propose (stores a plan) | `propose_changes`, `rename_tag` |
+| Read | `status`, `list_libraries`, `search_files`, `get_file`, `similar_files`, `list_tags`, `list_facets`, `list_vocabulary`, `search_catalog`, `estimate`, `get_plan`, `list_plans`, `list_reviews`, `cleanup_report`, `doctor`, `list_vfolders`, `vfolder_files` |
+| Propose (stores a plan) | `propose_changes`, `rename_tag`, `add_to_vfolder`, `remove_from_vfolder` |
 | Run (local, no tags written) | `scan` |
 | Needs approval | `apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `pick_topics`, `resolve_reviews`, `discard_plan` |
-| Never offered | `add_library`, `remove_library`, `browse_dirs`, `save_facet`, `delete_facet`, `set_enabled`, `set_vocabulary`, `cancel_job`, `get_config`, `set_config`, `list_keys`, `set_api_key`, `remove_api_key`, `set_env_keys`, `reveal_file`, `open_file` |
+| Never offered | `add_library`, `remove_library`, `browse_dirs`, `save_facet`, `delete_facet`, `set_enabled`, `set_vocabulary`, `cancel_job`, `get_config`, `set_config`, `list_keys`, `set_api_key`, `remove_api_key`, `set_env_keys`, `reveal_file`, `open_file`, `save_vfolder`, `delete_vfolder` |
 
 The last row is a security boundary. A model cannot reach keys or config, add a folder, or browse the
 disk. It sees only what is already in a library.

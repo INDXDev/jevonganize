@@ -6,14 +6,24 @@ import { compileQuery, FILE_COLUMNS, orderBy, type RawFileRow, toFileRow } from 
 import type { FileRecord } from './files.ts';
 import { folderRange } from './paths.ts';
 
-/** Runs a `FileQuery`. Without `limit` it returns every match, so callers bound what they show. */
-export function searchFiles(sql: Sql, query: FileQuery): { files: FileRow[]; total: number } {
-  const { matches, from, params, ranked } = compileQuery(query);
+/** How many files a compiled query matches, from the total cache when it can. */
+function cachedTotal(sql: Sql, { matches, from, params }: ReturnType<typeof compileQuery>): number {
   const countSql = `${matches} SELECT count(*) AS n ${from}`;
-  const n = sql.cachedCount(
+  return sql.cachedCount(
     JSON.stringify([countSql, params]),
     () => sql.get<{ n: number }>(countSql, ...params)!.n,
   );
+}
+
+/** How many files a `FileQuery` matches, ignoring its paging. Shares the total cache with search. */
+export const countFiles = (sql: Sql, query: FileQuery): number =>
+  cachedTotal(sql, compileQuery(query));
+
+/** Runs a `FileQuery`. Without `limit` it returns every match, so callers bound what they show. */
+export function searchFiles(sql: Sql, query: FileQuery): { files: FileRow[]; total: number } {
+  const compiled = compileQuery(query);
+  const { matches, from, params, ranked } = compiled;
+  const n = cachedTotal(sql, compiled);
   const order = orderBy(query, ranked);
   const indexedName = query.sort === 'name' || (!ranked && query.sort === undefined);
   const paged = query.limit !== undefined && !indexedName;

@@ -4,6 +4,7 @@ import type { ToolName } from '../types.ts';
 const PLANS: ToolName[] = ['status', 'list_plans', 'get_plan'];
 const KEYS: ToolName[] = ['list_keys', 'status', 'doctor', 'estimate', 'get_config'];
 const FACETS: ToolName[] = ['list_facets', 'status', 'estimate', 'get_config'];
+const VFOLDERS: ToolName[] = ['list_vfolders', 'vfolder_files'];
 
 /**
  * A job's own reads refresh when it ends, in `onEvent`. A write missing here refreshes everything,
@@ -30,6 +31,10 @@ const REFRESHED: Partial<Record<ToolName, ToolName[]>> = {
   set_api_key: KEYS,
   remove_api_key: KEYS,
   set_env_keys: KEYS,
+  save_vfolder: VFOLDERS,
+  delete_vfolder: VFOLDERS,
+  add_to_vfolder: PLANS,
+  remove_from_vfolder: PLANS,
 };
 
 /** The reads to refetch after `tool`, or `undefined` for all of them. */
@@ -49,4 +54,6 @@ export const JOB_READS: ToolName[] = [
   'list_reviews',
   'cleanup_report',
   'estimate',
+  'list_vfolders',
+  'vfolder_files',
 ];

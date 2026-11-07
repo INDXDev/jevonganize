@@ -1,8 +1,9 @@
 import { t } from '../i18n/index.ts';
 import type { VirtualItem } from '@tanstack/react-virtual';
-import { useRef, type MouseEvent, type ReactNode } from 'react';
+import { useRef, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import type { FileQuery, FileRow } from '../../types.ts';
 import { act } from '../api.ts';
+import { startFileDrag } from '../file-drag.ts';
 import { cn } from '../lib.ts';
 import { useWindow } from '../tabs.ts';
 import {
@@ -115,6 +116,8 @@ function FileCell({ index, view }: { index: number; view: CellView }) {
     onClick: (e: MouseEvent) => view.onClick(e, index, row),
     onDoubleClick: () => view.onDoubleClick?.(row.id),
     onFocus: () => view.onFocus(index),
+    draggable: true,
+    onDragStart: (e: DragEvent) => startFileDrag(e, row.id),
   };
   const item = { row, on, active, shared, options };
   return grid ? <Tile {...item} tile={layout.tile} /> : <Line {...item} />;

@@ -11,10 +11,12 @@ import * as reviews from './db/reviews.ts';
 import { migrate, schemaVersion } from './db/schema.ts';
 import * as search from './db/search.ts';
 import * as tags from './db/tags.ts';
+import * as vfolders from './db/vfolders.ts';
 import * as vocabulary from './db/vocabulary.ts';
 
 export type { FileRecord, Fingerprint } from './db/files.ts';
 export type { MirrorTag } from './db/tags.ts';
+export type { VirtualFolderRow } from './db/vfolders.ts';
 
 const SQLITE_NOTADB = 26;
 
@@ -62,5 +64,6 @@ export function openDb(location: string = paths.database()) {
     ...bind(sql, reviews),
     ...bind(sql, plans),
     ...bind(sql, vocabulary),
+    ...bind(sql, vfolders),
   };
 }

@@ -13,6 +13,13 @@ import { initialFacets } from './mock-facets.ts';
 import { DAY, files, HOME, LIBS, NOW } from './mock-files.ts';
 import { find, plans, propose, write } from './mock-plans.ts';
 import { detail, df, facetOf, matchCount, search, similar } from './mock-search.ts';
+import {
+  deleteVfolder,
+  listVfolders,
+  moveFiles,
+  saveVfolder,
+  vfolderFiles,
+} from './mock-vfolders.ts';
 
 export { fileUrl, thumb } from './mock-assets.ts';
 export { chatFetch } from './mock-chat.ts';
@@ -213,6 +220,12 @@ const tools: { [K in ToolName]: (input: ToolMap[K][0]) => ToolMap[K][1] } = {
     }
   },
   propose_changes: (input) => propose(input),
+  list_vfolders: listVfolders,
+  save_vfolder: saveVfolder,
+  delete_vfolder: deleteVfolder,
+  vfolder_files: vfolderFiles,
+  add_to_vfolder: (input) => moveFiles(input, true),
+  remove_from_vfolder: (input) => moveFiles(input, false),
   rename_tag: ({ from, to }) =>
     propose(
       { query: { tags: [from] }, add: [to], remove: [from], title: `Rename ${from} to ${to}` },

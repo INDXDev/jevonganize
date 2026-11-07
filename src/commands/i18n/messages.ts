@@ -1,5 +1,8 @@
 /** Terminal translations; identifiers and model data stay in their original form. */
+import { folderMessages } from './folders.ts';
+
 export const messages = {
+  ...folderMessages,
   Yes: ['はい', '是'],
   No: ['いいえ', '否'],
   'Print JSON': ['JSONで出力', '输出 JSON'],

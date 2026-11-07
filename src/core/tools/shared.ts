@@ -48,6 +48,10 @@ export const fileQuery = z.strictObject({
   tags: z.array(tag).optional(),
   tag_match: z.enum(['any', 'all']).optional(),
   exclude_tags: z.array(tag).optional(),
+  tag_groups: z
+    .array(z.strictObject({ tags: z.array(tag), tag_match: z.enum(['any', 'all']) }))
+    .max(8)
+    .optional(),
   mime: z.string().optional(),
   status: z.enum(['new', 'organized', 'failed']).optional(),
   hide_dotfiles: z.boolean().optional(),

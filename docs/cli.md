@@ -56,6 +56,11 @@ files.
 | `topics search` | `search_catalog` |
 | `topics add` | `set_vocabulary` |
 | `names add` | `set_vocabulary` |
+| `folders`, `folders list` | `list_vfolders` |
+| `folders add` | `list_vfolders` (for `--parent`), `save_vfolder` |
+| `folders show` | `list_vfolders`, `vfolder_files` |
+| `folders rm` | `list_vfolders`, `delete_vfolder` |
+| `folders put`, `folders take` | `list_vfolders`, `get_file`, `add_to_vfolder` or `remove_from_vfolder` |
 | `facets list`, `facets show` | `list_facets` |
 | `facets enable`, `facets disable` | `set_enabled` |
 | `config get` | `get_config` |
@@ -364,6 +369,37 @@ jevonganize names add organization "Acme Corp"
 Registers a proper name. Its kind is `person`, `organization`, `place`, `product`, `project` or
 `event`. The next `organize` asks about it for every file. `organize` also reads names out of files by
 itself, and there is no separate run. The UI's Names screen lists and removes them.
+
+## `jevonganize folders`
+
+[Virtual folders](concepts.md#virtual-folders): saved tag rules that collect files on their own.
+Nothing on disk moves. A `<folder>` is an id, a name, or a path of names such as `Taxes/2025`; an id
+wins over a name made of digits.
+
+| Command | Description |
+| --- | --- |
+| `folders` | The saved tree: name, file count, rule, home tag and id. `--auto` adds the generated folders, one per tag namespace and value |
+| `folders add <name>` | Save a folder. `--tag` repeats, and a file needs any of them unless `--all`. `--not-tag` leaves files out. `--parent <folder>` nests it, which narrows it. `--home <tag>` sets the home tag. `--folder <path>` keeps it to a library folder |
+| `folders show <folder>` | The files in a folder, or in a generated one by its tag, such as `topic:finance` or `topic:`. `--limit` and `--offset` page |
+| `folders rm <folder>` | Delete a folder and the folders inside it. No file or tag changes |
+| `folders put <folder> <file...>` | Plan to add the home tag, and those of the folders above. Prints the plan; `apply` runs it |
+| `folders take <folder> <file...>` | Plan to remove the folder's home tag |
+
+```text
+$ jevonganize folders add Taxes --tag topic:finance/tax
+Saved folder Taxes (id 1).
+Files put in it get topic:finance/tax.
+
+$ jevonganize folders add 2025 --parent Taxes --tag doc-date:2025
+$ jevonganize folders
+Taxes  14  topic:finance/tax  → topic:finance/tax  #1
+  2025  6  doc-date:2025  → doc-date:2025  #2
+
+$ jevonganize folders put Taxes/2025 ~/Downloads/receipt.pdf
+Plan 5c1e9a02: Add to folder 2025
+  1 files, 2 tags added, 0 removed
+Nothing was written. Run: jevonganize apply 5c1e9a02
+```
 
 ## `jevonganize facets`
 

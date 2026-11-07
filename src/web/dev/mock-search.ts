@@ -11,12 +11,18 @@ function mimeMatches(file: FileRow, wanted: string) {
 
 /** True when a file passes a query's folder, text, tag, type and status filters. */
 export function matches(file: FileRow, q: FileQuery) {
-  const tagged = (tag: string) => file.tags.some((t) => t === tag || t.startsWith(`${tag}/`));
+  const tagged = (tag: string) =>
+    file.tags.some((t) =>
+      tag.endsWith(':') ? t.startsWith(tag) : t === tag || t.startsWith(`${tag}/`),
+    );
+  const group = (tags: string[], match?: 'any' | 'all') =>
+    match === 'any' ? tags.some(tagged) : tags.every(tagged);
   const searchable = `${file.name} ${file.tags.join(' ')}`.toLowerCase();
   if (q.folder && !file.path.startsWith(q.folder)) return false;
   if (q.text && !searchable.includes(q.text.toLowerCase())) return false;
   if (q.tags && !(q.tag_match === 'any' ? q.tags.some(tagged) : q.tags.every(tagged))) return false;
   if (q.exclude_tags?.some(tagged)) return false;
+  if (q.tag_groups?.some((g) => !group(g.tags, g.tag_match))) return false;
   if (q.mime && !mimeMatches(file, q.mime)) return false;
   return !q.status || file.status === q.status;
 }

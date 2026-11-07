@@ -109,6 +109,25 @@ rather than apply. See [presets](presets.md#thresholds) for the exact rules.
 
 These thresholds are starting points, not measured values. They do not carry over between models.
 
+## Virtual folders
+
+A virtual folder exists nowhere on disk. It is a saved, named rule over tags, such as "files tagged
+`topic:finance/tax`". Every indexed file that matches collects in it on its own, the way a chat
+channel collects a hashtag, and a file can sit in many folders at once. Nothing moves.
+
+- **Rule.** Tags, with `any` or `all` of them, tags to leave out, and an optional library folder.
+  An empty rule matches every file, which suits a folder that only groups others.
+- **Nesting narrows.** A folder inside another shows only files that match both, so `Taxes / 2024`
+  holds the tax files tagged 2024. Folders nest up to 8 deep, and a folder cannot go inside itself.
+- **Home tag.** Putting a file in a folder, by dropping it there or with `folders put`, gives it the
+  folder's home tag, and the home tag of each folder above that has one. That is a
+  [plan](#the-two-flows), so you see it before it runs and can undo it. A folder whose rule is one tag
+  uses that tag; otherwise you name one, or nothing can be put in.
+- **Generated folders.** One folder per tag namespace, such as `topic`, with a child per value, nested
+  by `/`. They are computed from the tags you have and never stored. Pin one to keep it as your own.
+
+Deleting a folder deletes the folders inside it and nothing else: files and their tags stay.
+
 ## Tags are the truth
 
 Tags on disk are the source of truth. The database is an index of them. If you delete it, your tags
@@ -130,6 +149,7 @@ Jevonganize never removes it on its own. See [tags](tags.md#ai-provenance).
 | Facet | One attribute of a file, as a definition |
 | Fingerprint | `ino`, `size`, `mtimeNs` and `ctimeNs`. It tells a scan whether a file changed |
 | FileState | What a model receives for one file: text, images and metadata |
+| Home tag | What a file put in a virtual folder gets |
 | Index | The local SQLite database. It mirrors tags and stores answers |
 | Label | One allowed value of a facet |
 | Library | A folder you asked Jevonganize to manage |
@@ -144,4 +164,5 @@ Jevonganize never removes it on its own. See [tags](tags.md#ai-provenance).
 | Review queue | Items waiting for a person: suggested tags and lost tags |
 | State | The input sent to a model, in SDK terms. Built from FileState |
 | Tag | One string on one file, on disk |
+| Virtual folder | A saved rule over tags. Matching files collect in it; nothing on disk moves |
 | Vocabulary | The accepted labels of an open facet |

@@ -156,6 +156,16 @@ milliseconds per file, and no OS offers an atomic alternative.
 
 A failed write is recorded in `plan.errors` for that file, and the rest of the plan continues.
 
+## Virtual folders
+
+A [virtual folder](concepts.md#virtual-folders) is a rule over tags, kept in the index. It writes
+nothing to disk, and only its tags put a file in it. So dropping a file on a folder, or
+`folders put`, is a tag change: `add_to_vfolder` stores a plan that adds the folder's home tag, and
+the home tag of each folder above it that has one. Taking a file out, `remove_from_vfolder`, plans
+removing only the folder's own home tag. Both run through `apply_plan` and the merge above, so they
+can be seen first and undone, and they are a person's tags, not AI ones. A file that still matches
+through another tag, such as a child `topic:finance/tax` under `topic:finance`, stays in the folder.
+
 ## AI provenance
 
 `file_tag.ai` is 1 when the app wrote the tag: an applied AI answer, or a `field` value from metadata.

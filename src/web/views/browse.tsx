@@ -8,8 +8,10 @@ import { Divider, Pane, Panes } from '../components/pane.tsx';
 import { formatCount } from '../lib.ts';
 import { notify, setView, useActions, useView, useWindow } from '../tabs.ts';
 import { sortOf, toFileQuery, type View } from '../view-query.ts';
+import { useViewScope } from '../vfolder-query.ts';
 import { QuickPreview, TagDialog } from './browse-dialogs.tsx';
 import { Sidebar } from './browse-sidebar.tsx';
+import { FolderBar } from './browse-vfolders.tsx';
 import { Toolbar } from './browse-toolbar.tsx';
 import { Inspector } from './inspector.tsx';
 
@@ -68,8 +70,14 @@ function useBrowseActions(view: View) {
   });
 }
 
-function ListPane(props: { view: View; query: FileQuery; libraries: Library[] }) {
-  const { view, query, libraries } = props;
+/** `query` is undefined while a virtual folder's rule loads; `shown` stands in for the toolbar. */
+function ListPane(props: {
+  view: View;
+  query?: FileQuery;
+  shown: FileQuery;
+  libraries: Library[];
+}) {
+  const { view, libraries, shown: query } = props;
   return (
     <Pane
       id="list"
@@ -77,6 +85,7 @@ function ListPane(props: { view: View; query: FileQuery; libraries: Library[] })
       title={<Toolbar view={view} query={query} libraries={libraries} />}
       subheader={
         <>
+          {view.vfolder && <FolderBar view={view} />}
           <Filters view={view} className="border-b bg-surface-1 px-3 py-1.5" />
           <Subfolders folder={view.folder} />
         </>
@@ -86,7 +95,7 @@ function ListPane(props: { view: View; query: FileQuery; libraries: Library[] })
         keyboard
         mode={view.view}
         label={t('Files')}
-        query={query}
+        query={props.query}
         activeId={view.file}
         onOpen={(row) => setView({ file: row.id })}
         onCursor={(row) => view.file && setView({ file: row.id })}
@@ -103,7 +112,9 @@ function ListPane(props: { view: View; query: FileQuery; libraries: Library[] })
 /** The file browser: sidebar, list and inspector. */
 export function Browse() {
   const view = useView();
-  const query = toFileQuery(view, useViewOptions());
+  const options = useViewOptions();
+  const query = useViewScope(view, options);
+  const shown = query ?? toFileQuery(view, options);
   const sidebar = useWindow((s) => s.sidebar);
   const inspector = useWindow((s) => s.inspector);
   const { data: libraries = [] } = useTool('list_libraries', {});
@@ -121,7 +132,7 @@ export function Browse() {
             <Divider />
           </>
         )}
-        <ListPane view={view} query={query} libraries={libraries} />
+        <ListPane view={view} query={query} shown={shown} libraries={libraries} />
         {inspector && (
           <>
             <Divider />
@@ -129,7 +140,7 @@ export function Browse() {
           </>
         )}
       </Panes>
-      <TagDialog query={query} />
+      <TagDialog query={shown} />
       <QuickPreview id={view.file} />
     </>
   );

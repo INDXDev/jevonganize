@@ -1,13 +1,14 @@
 /** Explicit interface translations; file content is never a translation key. */
 import { useSyncExternalStore } from 'react';
 import type { Language } from '../../types.ts';
+import { folders } from './folders.ts';
 import { shell } from './shell.ts';
 import { views } from './views.ts';
 
 /** A supported display language, after resolving the PC preference. */
 export type { Language } from '../../types.ts';
 
-const messages = { ...shell, ...views };
+const messages = { ...shell, ...views, ...folders };
 type Message = keyof typeof messages;
 type Slots<S extends string> = S extends `${string}{${infer Name}}${infer Rest}`
   ? Name | Slots<Rest>

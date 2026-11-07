@@ -35,6 +35,10 @@ export type View = {
   file?: number;
   facet?: string;
   section?: string;
+  /** The open virtual folder: a saved folder's id, or a generated folder's key. */
+  vfolder?: string;
+  /** Its name, for the tab title. */
+  vname?: string;
 };
 
 export function parseView(query: string): View {
@@ -58,6 +62,8 @@ export function parseView(query: string): View {
     file: file || undefined,
     facet: get('facet'),
     section: get('section'),
+    vfolder: get('vfolder'),
+    vname: get('vname'),
   };
 }
 
@@ -116,5 +122,6 @@ export function lastSegment(path: string) {
 export function titleOf(query: string): string {
   const v = parseView(query);
   if (v.screen !== 'browse') return screenTitle(v.screen);
+  if (v.vfolder) return v.vname ?? v.vfolder;
   return v.tag[0] ?? (v.folder ? lastSegment(v.folder) : t('All files'));
 }

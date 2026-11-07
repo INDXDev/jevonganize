@@ -81,8 +81,10 @@ The closed-output limit does not apply here, and this section says what does.
   a hostile name can steer it. It cannot apply anything or spend money, because `apply_plan`,
   `undo_plan`, `organize`, `suggest_tags` and `pick_topics` need approval. It cannot delete a `restore` item or a
   proposed plan, because `resolve_reviews` and `discard_plan` need approval too. It cannot reach keys
-  or config, because those tools have `agent: false`. And `apply_plan` takes only an id, so a plan
-  cannot change after you see it.
+  or config, because those tools have `agent: false`. It can read virtual folders and propose putting
+  files in one, which is a plan like any other, but it cannot save or delete a folder:
+  `save_vfolder` and `delete_vfolder` are `agent: false`, like `save_facet`. And `apply_plan` takes
+  only an id, so a plan cannot change after you see it.
 
 The result: a hostile name in chat can at worst get a misleading plan shown to you, or trigger the
 costs listed under [Some risks remain](#some-risks-remain).

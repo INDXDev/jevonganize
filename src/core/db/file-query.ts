@@ -40,6 +40,14 @@ const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, '\\$&')}%`;
  * is the character after `/` and `.` the one after `-`, so each range is exactly that prefix.
  */
 function filesWithTagOrChild(tag: Tag): Clause {
+  if (tag.endsWith(':')) {
+    // `topic:` is a whole namespace, and `;` is the character after `:`.
+    return {
+      sql: `SELECT file_id FROM file_tag WHERE tag_id IN
+        (SELECT id FROM tag WHERE name >= ? AND name < ?)`,
+      params: [tag, `${tag.slice(0, -1)};`],
+    };
+  }
   const isYear = YEAR_TAG.test(tag); // `doc-date:2026` also owns `doc-date:2026-03`
   const monthRange = isYear ? ' OR (name >= ? AND name < ?)' : '';
   const monthBounds = isYear ? [`${tag}-`, `${tag}.`] : [];
@@ -67,15 +75,24 @@ function contentMatches(text: string): Clause {
   };
 }
 
+/** The files carrying `any` or `all` of some tags, or null when there are none. */
+function tagGroup(tags: Tag[], match: FileQuery['tag_match']): Clause | null {
+  const wanted = tags.map(filesWithTagOrChild);
+  if (wanted.length === 0) return null;
+  const joiner = match === 'any' ? ' OR ' : ' AND ';
+  const sql = wanted.map((clause) => `f.id IN (${clause.sql})`).join(joiner);
+  return { sql: `(${sql})`, params: wanted.flatMap((clause) => clause.params) };
+}
+
 function tagClauses(query: FileQuery): Clause[] {
-  const wanted = (query.tags ?? []).map(filesWithTagOrChild);
   const excluded = (query.exclude_tags ?? [])
     .map(filesWithTagOrChild)
     .map((match) => ({ sql: `f.id NOT IN (${match.sql})`, params: match.params }));
-  if (wanted.length === 0) return excluded;
-  const joiner = query.tag_match === 'any' ? ' OR ' : ' AND ';
-  const wantedSql = wanted.map((match) => `f.id IN (${match.sql})`).join(joiner);
-  return [{ sql: `(${wantedSql})`, params: wanted.flatMap((match) => match.params) }, ...excluded];
+  const groups = [
+    tagGroup(query.tags ?? [], query.tag_match),
+    ...(query.tag_groups ?? []).map((group) => tagGroup(group.tags, group.tag_match)),
+  ].filter((clause) => clause !== null);
+  return [...groups, ...excluded];
 }
 
 /** A library may itself sit in a dot folder, so only the part below the library counts. */

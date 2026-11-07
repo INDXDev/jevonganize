@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import { getLanguage, setLanguage, t } from '../src/web/i18n/index.ts';
+import { folders } from '../src/web/i18n/folders.ts';
 import { shell } from '../src/web/i18n/shell.ts';
 import { views } from '../src/web/i18n/views.ts';
 
@@ -12,7 +13,7 @@ const slots = (text: string) =>
 
 describe('interface translations', () => {
   test('every catalog preserves interpolation fields in Japanese and Chinese', () => {
-    for (const [key, translations] of Object.entries({ ...shell, ...views })) {
+    for (const [key, translations] of Object.entries({ ...shell, ...views, ...folders })) {
       for (const text of translations) {
         expect({ key, text: text.trim() }).not.toEqual({ key, text: '' });
         expect({ key, slots: slots(text) }).toEqual({ key, slots: slots(key) });
@@ -22,6 +23,8 @@ describe('interface translations', () => {
 
   test('shared messages are defined once across views and controls', () => {
     expect(Object.keys(views).filter((key) => Object.hasOwn(shell, key))).toEqual([]);
+    const shared = { ...shell, ...views };
+    expect(Object.keys(folders).filter((key) => Object.hasOwn(shared, key))).toEqual([]);
   });
 
   test('explicit language overrides the PC preference and system restores it', () => {

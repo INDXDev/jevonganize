@@ -196,7 +196,15 @@ function onEvent(event: ServerEvent) {
     if (job.status === 'failed')
       notify(job.error ?? t('The {kind} job failed', { kind: t(job.kind) }), true);
   } else if (event.type === 'files') {
-    invalidate('search_files', 'list_folders', 'list_tags', 'similar_files', 'status');
+    invalidate(
+      'search_files',
+      'list_folders',
+      'list_tags',
+      'similar_files',
+      'status',
+      'list_vfolders',
+      'vfolder_files',
+    );
     const ids = new Set(event.ids);
     void queryClient.invalidateQueries({
       queryKey: ['get_file'],

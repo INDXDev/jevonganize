@@ -12,7 +12,8 @@ import { Checkbox, Field, Input, Select, Switch } from '../components/ui/field.t
 import { formatCount, needsKey, shortPath } from '../lib.ts';
 import { TopicsField } from './organize-vocabulary.tsx';
 import { setView, useView } from '../tabs.ts';
-import { toFileQuery, type View } from '../view-query.ts';
+import type { View } from '../view-query.ts';
+import { useViewScope } from '../vfolder-query.ts';
 
 const ALL = '__all';
 
@@ -136,11 +137,12 @@ function useRunSetup() {
     [facets],
   );
   const chosen = picked ?? enabled;
+  const scope = useViewScope(view, options);
   const input = {
-    query: { ...toFileQuery(view, options), limit },
+    query: { ...scope, limit },
     facets: picked && [...picked],
   };
-  const { data: estimate, error } = useTool('estimate', input);
+  const { data: estimate, error } = useTool('estimate', input, { enabled: !!scope });
 
   const jobs = (status?.jobs ?? []).toSorted(newest);
   const busy = jobs.some((j) => j.kind === 'organize' && j.status === 'running');
@@ -191,6 +193,18 @@ function FolderField({ view, libraries }: { view: View; libraries: Library[] }) 
           <FolderSync /> {t('Scan')}
         </Button>
       </span>
+      {view.vfolder && (
+        <span className="mt-1 flex items-center gap-2 text-xs text-subtle">
+          {t('Only files in the virtual folder {name}', { name: view.vname ?? view.vfolder })}
+          <button
+            type="button"
+            className="text-primary hover:underline"
+            onClick={() => setView({ vfolder: null, vname: null })}
+          >
+            {t('Leave the folder')}
+          </button>
+        </span>
+      )}
     </Field>
   );
 }
