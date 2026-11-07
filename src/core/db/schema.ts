@@ -79,6 +79,15 @@ WHEN old.weight <> new.weight AND (SELECT dirty FROM similarity_state WHERE id =
 BEGIN UPDATE similarity_state SET dirty = 1 WHERE id = 1; END;
 `,
   `ALTER TABLE file ADD COLUMN extract_key TEXT;`,
+  `
+CREATE TABLE vfolder (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+  parent INTEGER REFERENCES vfolder(id) ON DELETE CASCADE,
+  rule TEXT NOT NULL, tag TEXT, created_at INTEGER NOT NULL,
+  UNIQUE (parent, name)
+);
+CREATE UNIQUE INDEX vfolder_root_name ON vfolder(name) WHERE parent IS NULL;
+`,
 ];
 
 /** The schema version of this index. */

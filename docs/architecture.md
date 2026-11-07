@@ -116,6 +116,7 @@ jevonganize/
 │   │   ├── tag-refresh.ts Files that should probably have a tag, checked by the model
 │   │   ├── plans.ts      Propose, apply, undo
 │   │   ├── plan-conflicts.ts Whether an organize op still holds
+│   │   ├── vfolders.ts   Virtual folders: rules, trees and the plans that fill them
 │   │   ├── tools.ts      The tool table
 │   │   └── tools/        Its rows by concern, jobs and watching
 │   ├── extract/
@@ -163,7 +164,7 @@ Dependencies point downward only. `.oxlintrc.json` enforces this, so a violation
 | --- | --- | --- |
 | Interface | `cli.ts`, `commands/`, `mcp.ts`, `server/`, `desktop/`, `web/` | The tool table, types, `config.ts`, `credentials.ts`, `ai/chat.ts`. `web/` uses types only |
 | Tools | `core/tools.ts`, `core/tools/` | Everything below |
-| Flows | `core/organize.ts`, `core/estimate.ts`, `core/tag-refresh.ts`, `core/plans.ts`, `core/plan-conflicts.ts`, `core/scan.ts`, `core/fingerprint.ts`, `core/exclusions.ts`, `core/content-hash.ts`, `core/watch.ts`, `core/names.ts` | Everything below |
+| Flows | `core/organize.ts`, `core/estimate.ts`, `core/tag-refresh.ts`, `core/plans.ts`, `core/plan-conflicts.ts`, `core/vfolders.ts`, `core/scan.ts`, `core/fingerprint.ts`, `core/exclusions.ts`, `core/content-hash.ts`, `core/watch.ts`, `core/names.ts` | Everything below |
 | Engines | `extract/`, `ai/`, `core/facets.ts`, `core/facet-answers.ts` | Infrastructure, types |
 | Infrastructure | `core/config.ts`, `core/paths.ts`, `core/system-language.ts`, `core/credentials.ts`, `core/db.ts`, `core/db/`, `core/tags.ts`, `core/tag-reader.ts`, `core/tag-worker.ts`, `core/sanitize.ts` | Types |
 | Contracts | `types.ts` | Nothing |
@@ -204,7 +205,7 @@ Rules that keep this honest:
 | Tags | On each file | Real loss. This is the user's data |
 | Config, custom facets | Config directory, TOML | Real loss, but small and hand-editable |
 | API keys | Config directory, `credentials.toml`, mode `0600` | Enter them again |
-| Answers, reviews, plans, vocabulary | Data directory, `index.db` | Costs money to rebuild, and undo history is gone. Tags are safe |
+| Answers, reviews, plans, vocabulary, virtual folders | Data directory, `index.db` | Costs money to rebuild, and undo history is gone. Tags are safe |
 | File mirror, search text | Same database | Rebuilt by the next scan and organize |
 | Thumbnails | Cache directory | Rebuilt on demand |
 

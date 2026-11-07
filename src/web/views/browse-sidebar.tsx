@@ -7,6 +7,7 @@ import { TagChip } from '../components/tag-chip.tsx';
 import { cn, formatCount, shortPath } from '../lib.ts';
 import { setView } from '../tabs.ts';
 import type { View } from '../view-query.ts';
+import { FoldersSection } from './browse-vfolders.tsx';
 
 const TYPES = [
   ['PDF', 'application/pdf'],
@@ -107,7 +108,7 @@ function groupByFacet(tags: TagCount[]) {
   return other ? [...list, ['Other', other] as const] : list;
 }
 
-/** The left pane of the browser: libraries, tag groups, types and statuses. */
+/** The left pane of the browser: libraries, virtual folders, tag groups, types and statuses. */
 export function Sidebar({ view, libraries }: { view: View; libraries: Library[] }) {
   const { data: tags } = useTool('list_tags', { folder: view.folder });
   const groups = useMemo(() => groupByFacet(tags ?? []), [tags]);
@@ -115,7 +116,11 @@ export function Sidebar({ view, libraries }: { view: View; libraries: Library[] 
   return (
     <Pane id="sidebar" defaultSize="17%" minSize={180} maxSize="30%" className="pt-2.5">
       <Group title={t('Libraries')} tour="library">
-        <Row on={!view.folder} count={files} onClick={() => setView({ folder: null, file: null })}>
+        <Row
+          on={!view.folder && !view.vfolder}
+          count={files}
+          onClick={() => setView({ folder: null, file: null, vfolder: null, vname: null })}
+        >
           {t('All')}
         </Row>
         {libraries.map((library) => (
@@ -124,12 +129,15 @@ export function Sidebar({ view, libraries }: { view: View; libraries: Library[] 
             mono
             on={view.folder === library.path}
             count={library.files}
-            onClick={() => setView({ folder: library.path, file: null })}
+            onClick={() =>
+              setView({ folder: library.path, file: null, vfolder: null, vname: null })
+            }
           >
             {shortPath(library.path)}
           </Row>
         ))}
       </Group>
+      <FoldersSection view={view} />
       {groups.map(([facet, list]) => (
         <TagGroup
           key={facet}

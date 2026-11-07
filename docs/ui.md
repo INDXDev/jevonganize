@@ -198,6 +198,8 @@ stays the same. The server uses `port` from config unless that port is taken.
 | `file` | File id | The file in the inspector |
 | `facet` | Facet id | The facet open in the editor, or the facet filter on `tags` |
 | `section` | Section id | The section on `settings` or `review`, or the plan status on `activity` |
+| `vfolder` | A saved folder's id, or a generated folder's key | The open [virtual folder](#virtual-folders). Its rule is ANDed with the other filters, on Browse, Organize and chat |
+| `vname` | Text | That folder's name, for the tab title |
 
 The selection, the open panes and the chat are not view state, so they are not in the query. They
 belong to the window. `limit` and `offset` are not in it either: the virtual list sets them.
@@ -301,6 +303,7 @@ explains, which gets a highlight ring, and the tour goes to that element's scree
 **Sidebar.**
 
 - Libraries come from `list_libraries`. Each row shows the file count, and sets `folder`.
+- Folders, under the libraries, are the [virtual folders](#virtual-folders).
 - Tags come from `list_tags`, grouped by `facet`, with plain tags last under "Other". Counts cover
   the current folder, not the other filters.
 - Click a tag to add it to `tag`. `Alt`+click adds it to `not`. Child tags match, as `FileQuery.tags`
@@ -326,6 +329,23 @@ tiles per row, thumbnail size, spacing, whole or cropped thumbnails, the line un
 columns, text size, dotfiles, subfolders and extensions. A slider redraws as it moves and saves when it
 is let go. What a view hides, Organize and chat leave out too.
 A file on a volume that cannot store tags shows no tag actions anywhere.
+
+### Virtual folders
+
+The Folders section of the sidebar, marked `data-tour="vfolders"`, holds the saved tree from
+`list_vfolders`, with each folder's file count. Clicking a folder sets `vfolder` and clears `folder`
+and the tag filters, so the list shows exactly the folder's files, through `search_files` with the
+query `vfolder_files` returns. A strip above the list names the folder and its rule, counts its
+files, and closes it. With files selected, it offers Remove from folder, `remove_from_vfolder`.
+
+`+` opens New folder: name, tags with any or all, tags to leave out, the folder it goes inside, and an
+optional home tag. It starts from the tab's tag filters. Hovering a saved folder offers a folder inside
+it and Edit, where Delete also lives (`save_vfolder`, `delete_vfolder`). Deleting changes no file.
+
+Files dragged from the list onto a saved folder with a home tag become a plan, `add_to_vfolder`. It
+opens as a [block](#blocks), and nothing is written until Apply. A folder with no home tag takes no
+drop. Auto, below the saved tree, loads the generated folders only when opened: one per tag
+namespace, with its values nested by `/`. Each has a pin, which saves it as a folder of its own.
 
 **Inspector.** Opens when a file is clicked, and sets `file`. It calls `get_file` and `similar_files`.
 
@@ -803,6 +823,7 @@ tool's name does not appear in `web/`.
 | `suggest` | The spark in the inspector's Tags section |
 | `refresh` | [Refresh](#refresh) on a tag in Tags, or in the browser filtered to one tag |
 | `facets` | [Facets editor](#facets-editor) |
+| `folders` | The Folders section of the browser sidebar. See [Virtual folders](#virtual-folders) |
 | `config get`, `config set`, `config edit` | [Settings](#settings) |
 | `config path`, `doctor` | Settings > Health |
 | `auth` | Settings > API keys |
@@ -832,6 +853,8 @@ src/web/
 ├── api.ts              call(), the events hook
 ├── tabs.ts             The tab store
 ├── view-query.ts       URL query to and from view state and FileQuery
+├── vfolder-query.ts    A view inside a virtual folder, as one FileQuery
+├── file-drag.ts        Dragging file ids onto a folder
 ├── commands.ts         The one command array
 ├── tokens.css          Tokens and the Tailwind binding
 ├── components/
@@ -850,7 +873,7 @@ src/web/
 │   └── preview/        index.tsx, pdf.tsx, word.tsx, text.tsx
 └── views/
     ├── onboarding.tsx  State, with the steps in onboarding-steps.tsx
-    ├── browse.tsx      Panes, with browse-sidebar.tsx, browse-toolbar.tsx, browse-dialogs.tsx
+    ├── browse.tsx      Panes, with browse-sidebar.tsx, browse-toolbar.tsx, browse-dialogs.tsx, browse-vfolders.tsx
     ├── inspector.tsx   Selection and folders, with the file in inspector-file.tsx
     ├── organize.tsx
     ├── review.tsx

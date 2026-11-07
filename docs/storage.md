@@ -23,6 +23,7 @@ breaks, `better-sqlite3` is a close fallback.
 | `similarity_state` | Whether similarity weights need a rebuild | One flag row |
 | `vocabulary` | Values of open facets | One value and its state: `proposed`, `active` or `retired` |
 | `content` | Full-text search | The text sent for a file, by `rowid` = `file.id` |
+| `vfolder` | [Virtual folders](concepts.md#virtual-folders) | One folder: its name, parent, rule as JSON and home tag |
 
 `file.status` is `new`, `organized` or `failed`. A scan sets `new` on a changed file. Organize sets
 the other two.
@@ -103,6 +104,7 @@ Answers hold labels and numbers, never file content.
 | `review` | Middle-band items return from answers. `restore` items are gone for good | Only if answers are also lost |
 | `plan` | Undo history is gone. Tags are safe | No |
 | `vocabulary` | Accepted open values are forgotten, though tags stay on disk | No, but work is lost |
+| `vfolder` | Saved virtual folders are gone. Generated ones come back, and every file and tag stays | No, but work is lost |
 | `file_tag.ai` | [All tags count as human](tags.md#ai-provenance) | No |
 | `library` | Add your folders again | No |
 | `file`, `tag`, `file_tag` rows | Rebuilt by the next scan | No |
@@ -174,6 +176,11 @@ WHERE name = :t
    OR (name >= :t || '/' AND name < :t || '0')
    OR (:is_year AND name >= :t || '-' AND name < :t || '.');
 ```
+
+A tag that ends in `:` stands for its whole namespace: `topic:` matches every `topic:` tag, by the
+range from `topic:` up to `topic;`, as `;` follows `:`. `FileQuery.tag_groups` adds more conditions,
+each with its own `any` or `all`, joined with AND. Virtual folders use both, so a folder and its
+ancestors become one query, with no second engine.
 
 Matching is case-sensitive.
 

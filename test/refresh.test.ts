@@ -35,6 +35,10 @@ describe('what a write refreshes', () => {
     ['set_api_key', ['list_keys', 'status', 'doctor']],
     ['remove_api_key', ['list_keys', 'status', 'doctor']],
     ['set_env_keys', ['list_keys', 'status']],
+    ['save_vfolder', ['list_vfolders', 'vfolder_files']],
+    ['delete_vfolder', ['list_vfolders', 'vfolder_files']],
+    ['add_to_vfolder', ['list_plans', 'get_plan']],
+    ['remove_from_vfolder', ['list_plans', 'get_plan']],
   ])('%s reaches what shows its effect', (tool, reads) => {
     expect(refreshedBy(tool)).toEqual(expect.arrayContaining(reads));
   });

@@ -169,6 +169,8 @@ export interface FileQuery {
   tag_match?: 'any' | 'all';
   /** None of these. */
   exclude_tags?: Tag[];
+  /** More tag conditions, each of which must also hold. A virtual folder's ancestors become these. */
+  tag_groups?: TagGroup[];
   mime?: string;
   status?: FileRow['status'];
   /** Leaves out names starting with a dot, and anything in such a folder under its library. */
@@ -179,6 +181,51 @@ export interface FileQuery {
   order?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
+}
+
+/** Tags a file must carry, `any` of them or `all`, matching children as `FileQuery.tags` does. */
+export interface TagGroup {
+  tags: Tag[];
+  tag_match: 'any' | 'all';
+}
+
+/** What a virtual folder collects: a subset of `FileQuery`. See docs/concepts.md#virtual-folders. */
+export interface FolderRule {
+  /** Empty matches every file, which makes a folder that only groups others. */
+  tags: Tag[];
+  tag_match: 'any' | 'all';
+  exclude_tags: Tag[];
+  /** A library, or a folder in one. */
+  folder?: string;
+}
+
+/** A saved, named rule over tags. It exists only in the index, never on disk. */
+export interface VirtualFolder {
+  id: number;
+  name: string;
+  parent: number | null;
+  rule: FolderRule;
+  /** The tag a file dropped in gets. Null turns dropping off. */
+  tag: Tag | null;
+  created_at: number;
+}
+
+/** One folder in the tree `list_vfolders` returns, saved or generated. */
+export interface VirtualFolderNode {
+  /** The id as text for a saved folder; the tag or `<namespace>:` for a generated one. */
+  key: string;
+  name: string;
+  /** The stored folder, or null for a generated one. */
+  folder: VirtualFolder | null;
+  /** The files it holds now. */
+  count: number;
+  children: VirtualFolderNode[];
+}
+
+/** What `list_vfolders` returns. `generated` is empty unless asked for. */
+export interface VirtualFolderTree {
+  saved: VirtualFolderNode[];
+  generated: VirtualFolderNode[];
 }
 
 /** A folder directly under another, with every indexed file below it. */
@@ -353,6 +400,19 @@ export interface RefreshCandidates {
 
 type ChangeScope = { query?: FileQuery; file_ids?: number[] };
 
+/** The input of `save_vfolder`. Rule fields left out take the defaults in docs/contracts.md. */
+export type SaveVirtualFolder = {
+  id?: number;
+  name: string;
+  parent?: number | null;
+  rule: Partial<FolderRule>;
+  tag?: Tag | null;
+};
+
+/** A saved folder by `id`, or a generated one by its key. */
+type FolderRef = { id?: number; generated?: string };
+type FolderPage = Pick<FileQuery, 'hide_dotfiles' | 'sort' | 'order' | 'limit' | 'offset'>;
+
 /** Every tool's input and output, as `[input, output]`. docs/contracts.md describes each one. */
 export interface ToolMap {
   status: [Record<string, never>, Status];
@@ -407,6 +467,12 @@ export interface ToolMap {
   reveal_file: [{ id: number }, void];
   open_file: [{ id: number }, void];
   doctor: [Record<string, never>, Check[]];
+  list_vfolders: [{ generated?: boolean }, VirtualFolderTree];
+  save_vfolder: [SaveVirtualFolder, VirtualFolder];
+  delete_vfolder: [{ id: number }, void];
+  vfolder_files: [FolderRef & FolderPage, { files: FileRow[]; total: number; query: FileQuery }];
+  add_to_vfolder: [{ id: number; file_ids: number[] }, Plan];
+  remove_from_vfolder: [{ id: number; file_ids: number[] }, Plan];
 }
 
 export type ToolName = keyof ToolMap;

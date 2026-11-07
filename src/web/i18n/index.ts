@@ -1,6 +1,7 @@
 /** Explicit interface translations; file content is never a translation key. */
 import { useSyncExternalStore } from 'react';
 import type { Language } from '../../types.ts';
+import { folders } from './folders.ts';
 import { guide } from './guide.ts';
 import { shell } from './shell.ts';
 import { refresh } from './refresh.ts';
@@ -9,7 +10,7 @@ import { views } from './views.ts';
 /** A supported display language, after resolving the PC preference. */
 export type { Language } from '../../types.ts';
 
-const messages = { ...shell, ...views, ...guide, ...refresh };
+const messages = { ...shell, ...views, ...guide, ...refresh, ...folders };
 type Message = keyof typeof messages;
 /** A message with no slots to fill, which tables of copy can hold and `t` takes alone. */
 export type PlainMessage = { [K in Message]: K extends `${string}{${string}` ? never : K }[Message];

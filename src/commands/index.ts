@@ -9,6 +9,7 @@ import { addAskCommand } from './ask.ts';
 import { addCatalogCommands } from './catalog.ts';
 import { addFileCommands } from './files.ts';
 import { addRefreshCommand } from './refresh.ts';
+import { addFolderCommands } from './folders.ts';
 import { addSettingsCommands } from './settings.ts';
 import { addSetupCommand } from './setup.ts';
 import { command, type JsonFlag, note, out, outJson, withContext } from './shared.ts';
@@ -60,6 +61,7 @@ export function buildProgram(): Command {
   addFileCommands(program);
   addRefreshCommand(program);
   addCatalogCommands(program);
+  addFolderCommands(program);
   addSettingsCommands(program);
   addAskCommand(program);
   command(program, 'mcp', t('Run the MCP server over stdio'))

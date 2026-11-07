@@ -15,6 +15,11 @@ First version, not released yet.
   it but look like the files that have it, by their words, the tags that go with it and similar
   files. The decision model checks each one, after an estimate, and the likely ones wait in Review.
   Nothing is tagged until you accept.
+- Add virtual folders: saved, named tag rules that collect every matching file on their own, like a
+  channel collects a hashtag. Nothing on disk moves. A folder inside another narrows it, and an Auto
+  tree offers one folder per tag namespace and value, which can be pinned. Dropping files on a folder,
+  or `folders put`, plans its home tag, so it can be seen first and undone. See the Folders section of
+  the sidebar and `jevonganize folders`. The index moves to schema version 5.
 - Excel and PowerPoint files preview as a drawn page again, not as raw bytes.
 - A double click, or the Open button in the inspector, opens a file in its default app. Executables,
   scripts, links and files with no extension are refused, and Reveal shows them instead.

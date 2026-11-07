@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import { getLanguage, setLanguage, t } from '../src/web/i18n/index.ts';
+import { folders } from '../src/web/i18n/folders.ts';
 import { guide } from '../src/web/i18n/guide.ts';
 import { shell } from '../src/web/i18n/shell.ts';
 import { views } from '../src/web/i18n/views.ts';
@@ -19,6 +20,7 @@ describe('interface translations', () => {
       ...views,
       ...guide,
       ...refresh,
+      ...folders,
     })) {
       for (const text of translations) {
         expect({ key, text: text.trim() }).not.toEqual({ key, text: '' });
@@ -34,6 +36,8 @@ describe('interface translations', () => {
     ).toEqual([]);
     const shared = { ...shell, ...views, ...guide };
     expect(Object.keys(refresh).filter((key) => Object.hasOwn(shared, key))).toEqual([]);
+    const before = { ...shared, ...refresh };
+    expect(Object.keys(folders).filter((key) => Object.hasOwn(before, key))).toEqual([]);
   });
 
   test('explicit language overrides the PC preference and system restores it', () => {

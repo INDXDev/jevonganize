@@ -14,7 +14,8 @@ import { Button } from '../components/ui/button.tsx';
 import { Textarea } from '../components/ui/field.tsx';
 import { cn, formatCount, keyLabel } from '../lib.ts';
 import { activeTab, goTo, useTabs, useWindow } from '../tabs.ts';
-import { parseView, titleOf, toFileQuery } from '../view-query.ts';
+import { parseView, titleOf } from '../view-query.ts';
+import { scopeNow } from '../vfolder-query.ts';
 
 // Module scope, so history survives closing the panel. It lives in memory only.
 const chat = new ChatState<UIMessage>({
@@ -140,7 +141,7 @@ function useComposer(sendMessage: typeof chat.sendMessage, busy: boolean) {
     if (!text.trim() || busy) return;
     void sendMessage({
       text: text.trim(),
-      metadata: { scope: toFileQuery(parseView(query), viewOptions()) },
+      metadata: { scope: scopeNow(parseView(query), viewOptions()) },
     });
     setText('');
   };

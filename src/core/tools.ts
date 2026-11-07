@@ -11,6 +11,7 @@ import { planTools } from './tools/plans.ts';
 import { refreshTools } from './tools/refresh.ts';
 import { reviewTools } from './tools/reviews.ts';
 import { settingsTools } from './tools/settings.ts';
+import { vfolderTools } from './tools/vfolders.ts';
 import { type Context, isModel, type Tool, type ToolTable } from './tools/shared.ts';
 
 export { waitForJob } from './tools/jobs.ts';
@@ -27,6 +28,7 @@ export const tools: ToolTable = {
   ...reviewTools,
   ...refreshTools,
   ...settingsTools,
+  ...vfolderTools,
 };
 
 /** True when `name` is in the table, for input from outside. */
