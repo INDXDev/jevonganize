@@ -14,7 +14,12 @@ const slots = (text: string) =>
 
 describe('interface translations', () => {
   test('every catalog preserves interpolation fields in Japanese and Chinese', () => {
-    for (const [key, translations] of Object.entries({ ...shell, ...views, ...guide, ...refresh })) {
+    for (const [key, translations] of Object.entries({
+      ...shell,
+      ...views,
+      ...guide,
+      ...refresh,
+    })) {
       for (const text of translations) {
         expect({ key, text: text.trim() }).not.toEqual({ key, text: '' });
         expect({ key, slots: slots(text) }).toEqual({ key, slots: slots(key) });
