@@ -138,9 +138,10 @@ describe('thumbnail failures', slow, () => {
   it('refuses a link or a missing file, leaving no marker', async () => {
     const link = join(home, 'link.jpg');
     await symlink(fixture('photo.jpg'), link);
-    expect(await thumbnail(row(link, 'f1:99'), 256)).toBeNull();
-    expect(await thumbnail(row(join(home, 'gone.jpg'), 'f1:99'), 256)).toBeNull();
-    await expect(stat(join(paths.thumbnails(), '99'))).rejects.toThrow('ENOENT');
+    // Not hex, so no hashed key from another test can share its folder.
+    expect(await thumbnail(row(link, 'f1:zz99'), 256)).toBeNull();
+    expect(await thumbnail(row(join(home, 'gone.jpg'), 'f1:zz99'), 256)).toBeNull();
+    await expect(stat(join(paths.thumbnails(), 'zz'))).rejects.toThrow('ENOENT');
   });
 });
 
