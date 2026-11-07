@@ -49,9 +49,10 @@ function Row(props: {
   );
 }
 
-function Group({ title, children }: { title: string; children: ReactNode }) {
+function Group(props: { title: string; tour?: string; children: ReactNode }) {
+  const { title, children } = props;
   return (
-    <section className="px-1.5 pb-3">
+    <section data-tour={props.tour} className="px-1.5 pb-3">
       <h3 className="label px-2 pb-1">{title}</h3>
       {children}
     </section>
@@ -113,7 +114,7 @@ export function Sidebar({ view, libraries }: { view: View; libraries: Library[] 
   const files = libraries.reduce((total, library) => total + library.files, 0);
   return (
     <Pane id="sidebar" defaultSize="17%" minSize={180} maxSize="30%" className="pt-2.5">
-      <Group title={t('Libraries')}>
+      <Group title={t('Libraries')} tour="library">
         <Row on={!view.folder} count={files} onClick={() => setView({ folder: null, file: null })}>
           {t('All')}
         </Row>

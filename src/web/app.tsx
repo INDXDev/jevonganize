@@ -26,11 +26,13 @@ import { useEvents, useTool, useViewOptions } from './api.ts';
 import { commands, useBindings } from './commands.ts';
 import { Divider } from './components/pane.tsx';
 import { Palette } from './components/palette.tsx';
+import { Tour } from './components/tour.tsx';
 import { Button } from './components/ui/button.tsx';
 import { Dialog } from './components/ui/dialog.tsx';
 import { Progress } from './components/ui/progress.tsx';
 import { cn, formatCount, isDesktop, isMac, keyLabel } from './lib.ts';
 import { activeTab, goTo, toggle, useTabs, useView, useWindow, type Theme } from './tabs.ts';
+import { startTour, useTour } from './tour.ts';
 import { SCREENS, titleOf, type Screen } from './view-query.ts';
 import { Activity } from './views/activity.tsx';
 import { Browse } from './views/browse.tsx';
@@ -92,6 +94,7 @@ function Rail({ active, reviews }: { active: Screen; reviews: number }) {
         type="button"
         aria-label={label}
         aria-current={id === active ? 'page' : undefined}
+        data-tour={`screen-${id}`}
         title={`${label} (g ${SCREENS.find((s) => s.id === id)!.key})`}
         onClick={() => goTo(id)}
         className={cn(
@@ -313,6 +316,12 @@ export function App() {
   // Latched, because the scan in step 2 adds a library while onboarding is still open.
   const [firstRun, setFirstRun] = useState(false);
   if (status && !status.libraries.length && !firstRun) setFirstRun(true);
+  const toured = useTour((s) => s.seen);
+  const shell = !!status && !!options && !(firstRun && !skipped);
+  // The tour follows setup, once per viewer. Later it starts only from Settings or the palette.
+  useEffect(() => {
+    if (shell && firstRun && !toured) startTour();
+  }, [shell, firstRun, toured]);
 
   useEffect(() => {
     history.replaceState(null, '', query ? `?${query}` : location.pathname);
@@ -354,6 +363,7 @@ export function App() {
       <StatusBar />
       <Palette />
       <Shortcuts />
+      <Tour />
     </div>
   );
 }

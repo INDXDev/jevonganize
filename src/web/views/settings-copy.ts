@@ -124,3 +124,14 @@ const descriptions = {
 export function description(text: string | undefined): string | undefined {
   return text && Object.hasOwn(descriptions, text) ? t(text as keyof typeof descriptions) : text;
 }
+
+const keyHelp = {
+  exclude: 'Name patterns to skip, such as *.tmp. Secret files such as .env are always skipped.',
+} as const;
+
+/** Help for a key whose schema has no description of its own. */
+export function help(key: string, text: string | undefined): string | undefined {
+  return (
+    description(text) ?? (Object.hasOwn(keyHelp, key) ? t(keyHelp[key as 'exclude']) : undefined)
+  );
+}

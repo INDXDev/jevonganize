@@ -22,6 +22,13 @@ First version, not released yet.
 - `organize` also reads proper names: the decision model finds files that hold them, a light model
   reads them out, and they join the run's plan as `entity:` tags, outside `max_tags`. New `[ner]`
   setting and `names` pack. The Names screen and `names add` manage them.
+- Settings are grouped by task (Basics, AI, Tags and questions, Advanced), with plain page names, a
+  description on each page and a search box. One AI models page explains the decision model, which
+  decides every tag, the chat model and the name-reading model. Chat and name reading can follow the
+  decision model. Only the fields a service uses are shown, with defaults as placeholders, help text
+  and inline checks. Config keys are unchanged.
+- A short guided tour follows onboarding, once per viewer. Start it again from Settings or the
+  command palette.
 
 - Reuse extraction workers, PDF parses and recent unchanged extraction results; skip image rendering
   and encoding when images are disabled. Merge simultaneous thumbnail requests and prioritize

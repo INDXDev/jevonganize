@@ -72,6 +72,30 @@ On macOS, open Finder to see the tags. Press `Mod+Z` to undo a plan.
 Tags are not visible in Explorer on Windows or in GNOME Files on Linux. See
 [Troubleshooting](troubleshooting.md#tags-not-visible).
 
+## The guided tour
+
+After onboarding, whether you ran it or pressed **Skip for now**, a short tour offers itself. Press
+**Show me around** to walk through the main screens: your folders, Scan, Organize, Review, Tags,
+virtual folders, refreshing a tag, History and Settings. Each step highlights the part of the screen it
+talks about. It changes nothing, and **Not now** or `Esc` closes it.
+
+The tour shows once per browser or desktop window profile. Start it again from Settings > Language
+and help > **Start the tour**, or from the command palette (`Mod+K`, then "Start the tour").
+
+## Choosing models later
+
+Settings > **AI models** has one card per model, each saying what it does and what it sends:
+
+| Card | What it does |
+| --- | --- |
+| Decision model | Decides every tag. Organize and Refresh use only this model |
+| Chat model | The chat panel and tag suggestions. It never decides tags |
+| Name-reading model | Reads proper names out of file text during Organize |
+
+The chat and name-reading cards can be set to **Same as the decision model**. Only the fields a
+service uses are shown, each with its default as a placeholder. Keys go in Settings > **API keys**.
+See [Providers](providers.md).
+
 ## First run in the CLI
 
 The same flow in a terminal. Example output is shortened, and its figures are illustrative.

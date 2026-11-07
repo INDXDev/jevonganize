@@ -7,7 +7,9 @@ import { Button } from '../components/ui/button.tsx';
 import { Field, Input, Segmented, Select, Switch } from '../components/ui/field.tsx';
 import { formatCount, shortPath } from '../lib.ts';
 import { notify, useWindow, type Theme } from '../tabs.ts';
+import { startTour } from '../tour.ts';
 import type { ProviderName } from '../../types.ts';
+import type { Section } from './settings-layout.ts';
 
 const SOURCE = { env: 'From the environment', file: 'Stored in a file only you can read' } as const;
 
@@ -225,11 +227,23 @@ function Appearance() {
   );
 }
 
-/** The sections that do not come from the schema, by id, in nav order. */
-export const FIXED: Record<string, () => ReactNode> = {
+function TourStart() {
+  return (
+    <Field
+      label={t('Guided tour')}
+      help={t('A short walk through the main screens. It changes nothing.')}
+    >
+      <Button onClick={startTour}>{t('Start the tour')}</Button>
+    </Field>
+  );
+}
+
+/** The parts of pages that do not come from the schema, by `Section.fixed`. */
+export const FIXED: Record<Exclude<Section['fixed'], 'models' | undefined>, () => ReactNode> = {
   keys: Keys,
   libraries: Libraries,
   agents: Agents,
   appearance: Appearance,
   health: Health,
+  tour: TourStart,
 };
