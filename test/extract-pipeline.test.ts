@@ -133,12 +133,15 @@ describe('what a worker loads', () => {
 });
 
 describe('soffice profiles', () => {
-  it('runs with macros off, in a profile that goes with the process', async () => {
-    const bin = await mkdtemp(join(temp, 'bin-'));
-    const log = join(bin, 'log');
-    await writeFile(
-      join(bin, 'soffice'),
-      `#!/bin/sh
+  // Needs a shell script standing in for `soffice`. Windows looks for a compiled `soffice.exe`.
+  it.skipIf(process.platform === 'win32')(
+    'runs with macros off, in a profile that goes with the process',
+    async () => {
+      const bin = await mkdtemp(join(temp, 'bin-'));
+      const log = join(bin, 'log');
+      await writeFile(
+        join(bin, 'soffice'),
+        `#!/bin/sh
 profile=\${1#-env:UserInstallation=file://}
 grep -c DisableMacrosExecution "$profile/user/registrymodifications.xcu" >> ${JSON.stringify(log)}
 echo "$profile" >> ${JSON.stringify(log)}
@@ -146,31 +149,32 @@ shift
 for arg; do case "$prev" in --outdir) out=$arg ;; esac; prev=$arg; done
 cp ${JSON.stringify(fixture('report.pdf'))} "$out/converted.pdf"
 `,
-    );
-    await chmod(join(bin, 'soffice'), 0o755);
-    const path = join(temp, 'old.doc');
-    await writeFile(path, await readFile(fixture('plan.doc')));
-    const code = `
+      );
+      await chmod(join(bin, 'soffice'), 0o755);
+      const path = join(temp, 'old.doc');
+      await writeFile(path, await readFile(fixture('plan.doc')));
+      const code = `
       import { configSchema } from './src/core/config.ts';
       import { extractFile, workerPool } from './src/extract/index.ts';
       const config = configSchema.parse({ pipeline: [{ match: '*', use: ['libreoffice'] }] });
       const first = await extractFile(process.argv[1], config);
       console.log(first.text.length > 0);
       process.exit(0);`;
-    const run = await promisify(execFile)(
-      process.execPath,
-      ['--input-type=module', '-e', code, path],
-      {
-        cwd: join(import.meta.dirname, '..'),
-        env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}` },
-      },
-    );
-    expect(run.stdout.trim()).toBe('true');
-    const [count, profile = ''] = (await readFile(log, 'utf8')).trim().split('\n');
-    expect(count).toBe('1');
-    expect(basename(dirname(profile))).toMatch(/^jevonganize-soffice-/);
-    expect(existsSync(dirname(profile))).toBe(false); // gone with the process
-  });
+      const run = await promisify(execFile)(
+        process.execPath,
+        ['--input-type=module', '-e', code, path],
+        {
+          cwd: join(import.meta.dirname, '..'),
+          env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}` },
+        },
+      );
+      expect(run.stdout.trim()).toBe('true');
+      const [count, profile = ''] = (await readFile(log, 'utf8')).trim().split('\n');
+      expect(count).toBe('1');
+      expect(basename(dirname(profile))).toMatch(/^jevonganize-soffice-/);
+      expect(existsSync(dirname(profile))).toBe(false); // gone with the process
+    },
+  );
 });
 
 describe('hung tools', () => {
