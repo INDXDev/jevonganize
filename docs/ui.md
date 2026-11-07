@@ -1,6 +1,6 @@
 # UI
 
-The app follows the PC language by default. Settings > General > Language offers System default,
+The app follows the PC language by default. Settings > Language and help > Language offers System default,
 English, 日本語 and 简体中文, saved as the global `language` config. A save updates interface text,
 accessibility labels and formatting without restarting or discarding the current view. The browser
 and Electron use the same catalogs and the server's detected PC language. User content and tag
@@ -246,6 +246,36 @@ none were chosen, organizes and applies, and reads proper names and applies them
 
 "Skip for now" opens the browser. Scan and search work with no key. Organize refuses, as anywhere.
 
+## Guided tour
+
+After onboarding, by either way out, a tour starts once per viewer. Its first card, in the middle of
+the window, offers **Show me around** or **Not now**. Each later card sits beside the element it
+explains, which gets a highlight ring, and the tour goes to that element's screen first.
+
+| Step | Target (`data-tour`) | Screen |
+| --- | --- | --- |
+| Welcome | None | Any |
+| Your folders | `library` | Files |
+| Scan | `scan` | Files |
+| Organize | `organize` | Files |
+| Review | `screen-review` (the rail) | Any |
+| Tags | `screen-tags` | Any |
+| Virtual folders | `vfolders` | Files |
+| Refresh a tag | `tag-refresh` | Tags |
+| History and undo | `screen-activity` | Any |
+| Settings | `screen-settings` | Any |
+
+- A step whose target does not appear within about a second is skipped, in the direction of travel. A
+  feature adds a step by giving its element a `data-tour` id and a row in `STEPS` in `web/tour.ts`.
+- Not modal: the app stays usable, and the highlight does not take clicks. The card is a non-modal
+  `<dialog>` named by its title and described by its text. Focus moves to its main button on each
+  step and returns where it was when the tour closes. Right and Left arrows move, `Esc` closes, and
+  the step count is announced politely.
+- Next, Previous, Skip tour and a close button. The last step's button is Done.
+- Finishing or skipping saves `seen` in `localStorage` (`jev-tour`), like the window's other
+  preferences. No config key or server route is involved.
+- Start it again from Settings > Language and help, or the palette's "Start the tour".
+
 ## Browser
 
 ```text
@@ -367,7 +397,7 @@ every run reads them. See [Names](#names).
 
 - The numbers in the notice come from `[budget]` and `send_images`. Onboarding uses the same
   `SendNotice`.
-- With no key the button is disabled and links to Settings > Keys, as organize would refuse.
+- With no key the button is disabled and links to Settings > API keys, as organize would refuse.
 - Run shows each running job. Once it ends, it shows the result, the plan as a block with Apply, and a
   link to any new review items.
 - Apply when ready is remembered by the window that started the run, so a reload before the end
@@ -465,50 +495,97 @@ The form shows only the fields for the chosen kind. Field names match `Facet`.
 
 ## Settings
 
-`screen=settings`. The form is generated from the JSON Schema that `get_config` returns, so a new
-config key needs no UI code.
+`screen=settings`, with `section` naming the page. Pages are grouped by task, each with a plain title
+and a one-line description at the top. Config keys keep their `snake_case` names and are saved through
+`set_config`, as before: only the layout lives in the UI, in `web/views/settings-layout.ts`.
 
 ```text
-┌ Settings ─────────────────────────────────────── ⌕ Filter… ───────┐
-├──────────────┬────────────────────────────────────────────────────┤
-│ ▸ General    │ THRESHOLDS                                         │
-│   Provider   │ Apply                 [ 0.50 ]                     │
-│   Chat       │   At or above: joins the plan                      │
-│   Facets     │ Review                [ 0.50 ]                     │
-│   Thresholds │ Estimated to review   [■]                          │
-│   Budget     │                                                    │
-│   Watch      │ BUDGET                                             │
-│   ──────     │ Text chars            [ 8000 ]                     │
-│   Keys       │                                                    │
-│   Libraries  │                                                    │
-│   Agents     │                                                    │
-│   Appearance │                       [Discard]  [Save ⌘S]         │
-└──────────────┴────────────────────────────────────────────────────┘
+┌ Settings ──────────────┬──────────────────────────────────────────────────────────┐
+│ ⌕ Search settings      │ AI MODELS                                                │
+│ BASICS                 │ Which model decides tags, which one chats, and which…    │
+│   Language and help    │ ┌ Decision model  [Decides every tag] ─────────────────┐ │
+│   Folders              │ │ Answers your questions about each file by choosing…  │ │
+│   Appearance           │ │ Sends: each file's name, an excerpt of its text, …   │ │
+│ AI                     │ │ AI service  [ OpenAI ▾ ]  Recommended. Needs an…     │ │
+│ ▸ AI models            │ │ Model       [ gpt-6-luna ]  Leave empty to use …     │ │
+│   API keys             │ │ ✓ Key stored on this machine.   [Check the key]      │ │
+│ TAGS AND QUESTIONS     │ │ Send images [■]                                      │ │
+│   Tagging rules        │ └──────────────────────────────────────────────────────┘ │
+│ ADVANCED               │ ┌ Chat model ──────────────────────────────────────────┐ │
+│   File list            │ │ (Same as the decision model | A different model)     │ │
+│   What is read per file│ └──────────────────────────────────────────────────────┘ │
+│   Extraction pipeline  │ ┌ Name-reading model ──────────────────────────────────┐ │
+│   Server and speed     │ └──────────────────────────────────────────────────────┘ │
+│   Agents               │ EXTRA MODELS FOR SOME QUESTIONS                          │
+│   Health               │                              [Discard]  [Save ⌘S]        │
+└────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
+
+| Group | Page (`section`) | Holds |
+| --- | --- | --- |
+| Basics | Language and help (`general`) | `language`, and Start the tour |
+| Basics | Folders (`folders`) | Libraries, `exclude`, `[watch]` |
+| Basics | Appearance (`appearance`) | [Theme](#theme), density and UI scale, kept per window in `localStorage`, not config |
+| AI | AI models (`models`) | `[provider]`, `[chat]`, `[ner]`, `[profiles]`, `send_images` |
+| AI | API keys (`keys`) | `list_keys`, `set_api_key`, `remove_api_key`, `set_env_keys`. A key is never shown |
+| Tags and questions | Tagging rules (`tagging`) | `[facets]`, `[thresholds]`, `max_tags`, `fiscal_year_start`, `[tag_colors]` |
+| Advanced | File list (`display`) | `[view]` |
+| Advanced | What is read per file (`limits`) | `[budget]` |
+| Advanced | Extraction pipeline (`pipeline`) | `[[pipeline]]`, as JSON |
+| Advanced | Server and speed (`performance`) | `port`, `concurrency` |
+| Advanced | Agents (`agents`) | The MCP command with a Copy button. See [llm-native.md](llm-native.md#connecting-a-client) |
+| Advanced | Health (`health`) | `doctor`, with Check again, and the paths from `get_config` |
+
+A top-level key that no page names appears on an "Other" page under Advanced, so a new config key still
+shows with no UI code. Old `section` values such as `chat`, `thresholds` or `libraries` open the page
+that holds them now.
+
+**Search settings**, over the nav, narrows it to pages whose title, description or field names match,
+and narrows the fields on the open page too. A match on the page's own title shows the whole page.
+
+### AI models
+
+One card per model, saying what it is for and what it sends:
+
+| Card | Config | Notes |
+| --- | --- | --- |
+| Decision model | `[provider]` | Marked "Decides every tag". Every tag that `organize` or a refresh adds is decided here, never by the other two |
+| Chat model | `[chat]` | The chat panel, `ask`, tag suggestions. Never decides tags |
+| Name-reading model | `[ner]` | Proper names out of file text, as `entity:` tags |
+
+- The chat and name-reading cards offer **Same as the decision model** or **A different model**.
+  "Same" is not a config value: it copies `[provider]` into that table, and keeps copying while the
+  decision model is edited. It shows as selected when the saved tables reach the same model. A
+  decision-only service, such as `typesafe`, `cloudflare` or `compatible`, cannot chat, so "Same" is
+  then unavailable and the select lists only services that write text.
+- Each service shows only the fields it uses: Server address (`base_url`) for `compatible` and
+  `chat`, where it is required, and Cloudflare account ID (`account_id`) for `cloudflare`. A
+  `base_url` already set on another service stays visible with a warning, since `set_config` merges
+  tables and cannot clear it; remove it in `config.toml`.
+- The model field's placeholder is the service's default model. Help text sits under every field.
+- Missing required fields and an address that is not `http(s)` are marked inline, and Save stays
+  disabled until they are fixed.
+- Each card shows whether its service has a key, with a link to API keys. **Check the key** on the
+  decision card runs `doctor` on the saved config. It does not contact the service.
+- Extra models for some questions (`[profiles]`) are edited with the same fields. One is added by
+  name. Removing one needs `config.toml`.
+
+### Fields
 
 | Schema | Control |
 | --- | --- |
-| `object` | A section, with the key as its title. Top-level scalars go in General |
+| `object` | A block on its page. Some have a heading and a sentence, such as "How sure the model must be" over `[thresholds]` |
 | `boolean` | Switch |
 | `integer`, `number` | Number input, with the schema's minimum and maximum |
 | `string` with `enum` | Select |
 | `string` | Text input |
 | `array` of strings | Chip input |
-| `array` of objects, such as `pipeline`, and tables with free keys, such as `profiles` | JSON text, parsed as you type and validated by `set_config` on save. A profile cannot be deleted here, since `set_config` merges tables |
+| `array` of objects, such as `pipeline`, and tables with free keys, such as `tag_colors` | JSON text, parsed as you type and validated by `set_config` on save |
 | `description` | Help text under the control |
 
 Save sends the changed keys to `set_config`. A validation error comes back as `{ ok: false, error }`
-and shows above the form. See [configuration.md](configuration.md).
-
-Five sections do not come from the schema:
-
-| Section | Content |
-| --- | --- |
-| Keys | One row per provider from `list_keys`, showing where its key comes from. Save calls `set_api_key` and Remove calls `remove_api_key`. A switch calls `set_env_keys`. A key is never shown |
-| Libraries | `list_libraries`, `add_library` then `scan`, `scan` per row, `remove_library`. Removing clears the index only. Tags stay |
-| Agents | The MCP command with a Copy button. See [llm-native.md](llm-native.md#connecting-a-client) |
-| Appearance | [Theme](#theme), density and UI scale for every screen, kept in `localStorage`. They are per window and are not config. File list sizes are in the `[view]` config |
-| Health | `doctor`, with Check again, and the paths from `get_config` |
+and shows above the form. See [configuration.md](configuration.md). The config tools stay
+`agent: false`.
 
 ## Chat panel
 
@@ -695,7 +772,7 @@ tool's name does not appear in `web/`.
 | CLI | UI |
 | --- | --- |
 | `setup` | [Onboarding](#onboarding) |
-| `scan` | Scan in the browser toolbar, on Organize and in Settings > Libraries |
+| `scan` | Scan in the browser toolbar, on Organize and in Settings > Folders |
 | `organize` | [Organize](#organize) |
 | `plans`, `apply`, `undo` | Activity, with its status filter, and the plan [block](#blocks) |
 | `tags list`, `tags rename` | [Tags](#tags) |
@@ -706,9 +783,9 @@ tool's name does not appear in `web/`.
 | `facets` | [Facets editor](#facets-editor) |
 | `config get`, `config set`, `config edit` | [Settings](#settings) |
 | `config path`, `doctor` | Settings > Health |
-| `auth` | Settings > Keys |
+| `auth` | Settings > API keys |
 | `ask` | [Chat panel](#chat-panel) |
-| `mcp` | Settings > Agents shows how to connect a client. The client starts the server |
+| `mcp` | Settings > Agents, under Advanced, shows how to connect a client. The client starts the server |
 
 ## Accessibility
 
@@ -746,6 +823,7 @@ src/web/
 │   ├── filters.tsx     The tab's filters and the any/all switch
 │   ├── send-notice.tsx What a run sends and costs
 │   ├── palette.tsx
+│   ├── tour.tsx        The guided tour's coach mark. Steps and state are in ../tour.ts
 │   ├── folder-picker.tsx
 │   └── preview/        index.tsx, pdf.tsx, word.tsx, text.tsx
 └── views/
@@ -756,7 +834,8 @@ src/web/
     ├── review.tsx
     ├── tags.tsx
     ├── facets.tsx      The list, with the editor in facets-form.tsx
-    ├── settings.tsx    The shell, with settings-form.tsx and settings-sections.tsx
+    ├── settings.tsx    The shell. Pages in settings-layout.ts, AI models in settings-ai.tsx and
+    │                   settings-models.ts, fields in settings-form.tsx, fixed parts in settings-sections.tsx
     ├── activity.tsx
     └── chat.tsx
 ```

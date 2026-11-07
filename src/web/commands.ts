@@ -14,6 +14,7 @@ import {
   useWindow,
   type Theme,
 } from './tabs.ts';
+import { startTour } from './tour.ts';
 import { parseView, SCREENS } from './view-query.ts';
 
 type PlainKey = {
@@ -160,6 +161,14 @@ export const commands: Command[] = [
     keys: 'mod+z',
     group: 'Global',
     run: () => void undoLast(),
+  },
+  {
+    id: 'tour',
+    get title() {
+      return t('Start the tour');
+    },
+    group: 'Global',
+    run: startTour,
   },
   action('Global', 'save', 'Save the open form', 'mod+s'),
   action('Global', 'clear', 'Clear the selection or filter', 'escape'),

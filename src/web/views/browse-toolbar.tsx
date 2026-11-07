@@ -94,6 +94,7 @@ function ToolbarActions({ view, query }: { view: View; query: FileQuery }) {
       <Button
         variant="ghost"
         className="h-6"
+        data-tour="scan"
         title={t('Update the index from the disk. Local and free')}
         onClick={() => void scanFolder(view.folder)}
       >
@@ -102,6 +103,7 @@ function ToolbarActions({ view, query }: { view: View; query: FileQuery }) {
       <Button
         variant="primary"
         className="mr-1 h-6"
+        data-tour="organize"
         title={t('Choose facets, see the cost, then run')}
         onClick={() => goTo('organize')}
       >

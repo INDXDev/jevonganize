@@ -2,7 +2,7 @@ import { t } from '../i18n/index.ts';
 import { useState } from 'react';
 import { ChipInput, Field, Input, Select, Switch, Textarea } from '../components/ui/field.tsx';
 import { useReset } from '../lib.ts';
-import { description, optionTitle, title } from './settings-copy.ts';
+import { description, help, optionTitle, title } from './settings-copy.ts';
 
 /** The part of JSON Schema that `get_config` uses. */
 export type Schema = {
@@ -140,7 +140,7 @@ export function Fields(props: {
         .includes(filter),
     )
     .map(([key, field]) => (
-      <Field key={key} label={title(key)} help={description(field.description)}>
+      <Field key={key} label={title(key)} help={help(key, field.description)}>
         <Control
           name={key}
           schema={field}

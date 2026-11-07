@@ -52,6 +52,7 @@ export const CONFIG_SCHEMA = {
     provider: PROVIDER_SCHEMA,
     profiles: { type: 'object', additionalProperties: PROVIDER_SCHEMA },
     chat: PROVIDER_SCHEMA,
+    ner: PROVIDER_SCHEMA,
     facets: {
       type: 'object',
       properties: {
@@ -117,6 +118,7 @@ export const initialConfig: Record<string, unknown> = {
   provider: { name: 'openai', model: 'gpt-6-luna' },
   profiles: {},
   chat: { name: 'openai', model: 'gpt-6-luna' },
+  ner: { name: 'openai', model: 'gpt-5.4-mini' },
   facets: { enabled: ['core', 'time', 'sensitivity', 'media'], disabled: [] },
   thresholds: { apply: 0.5, review: 0.5, estimated_to_review: true },
   budget: {

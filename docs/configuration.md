@@ -28,7 +28,7 @@ The CLI, the server and the desktop app all use the same ones.
 
 | Way | How | Notes |
 | --- | --- | --- |
-| Settings screen | Form generated from the config's JSON Schema | Saves through `set_config` |
+| Settings screen | Pages grouped by task, with fields from the config's JSON Schema. See [ui.md](ui.md#settings) | Saves through `set_config` |
 | CLI | `jevonganize config set <key> <value>` | Saves through `set_config` |
 | File | `jevonganize config edit`, or any editor | `config edit` refuses to save an invalid file. Any other editor can, and the next load reports it |
 
@@ -92,7 +92,7 @@ sessions). The preference is detected once per process; restart after changing t
 Japanese variants use Japanese, Chinese variants use Simplified Chinese,
 and unsupported languages use English.
 
-Choose another language in Settings > General > Language, or set it directly:
+Choose another language in Settings > Language and help > Language, or set it directly:
 
 ```sh
 jevonganize config set language ja
@@ -146,7 +146,8 @@ To keep files out of the index altogether, use `exclude`.
 
 ## `[provider]`
 
-The default model, used for every facet with no `profile`. See [providers.md](providers.md).
+The default model, used for every facet with no `profile`. See [providers.md](providers.md). In the
+UI it is the **Decision model** card on Settings > AI models, the one model that decides tags.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -173,7 +174,9 @@ start. A file that reaches a profile's facet goes to that provider too.
 
 ## `[chat]`
 
-The model for the chat panel, `ask`, and tag suggestions. Same keys as `[provider]`.
+The model for the chat panel, `ask`, and tag suggestions. Same keys as `[provider]`. In the UI it is
+the **Chat model** card on Settings > AI models. Its "Same as the decision model" choice copies
+`[provider]` here when saved; there is no separate key for it.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -183,6 +186,7 @@ The model for the chat panel, `ask`, and tag suggestions. Same keys as `[provide
 ## `[ner]`
 
 The light text model that `organize` uses to read proper names out of files. Same keys as `[provider]`.
+In the UI it is the **Name-reading model** card on Settings > AI models.
 It is separate from `[provider]`, so with a local `[provider]` set this too, or file text goes to OpenAI.
 
 | Key | Default | Meaning |
