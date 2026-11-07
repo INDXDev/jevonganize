@@ -74,9 +74,12 @@ async function runAsk(request: string, flags: JsonFlag) {
         if (flags.json) outJson({ type: 'needs_approval', tool, plan_id });
         else if (plan_id && tool !== 'discard_plan')
           out(
-            t('Plan {id} needs a person. Run: jevonganize apply {id}', {
-              id: sanitizeLine(plan_id),
-            }),
+            t(
+              tool === 'undo_plan'
+                ? 'Plan {id} needs a person. Run: jevonganize undo {id}'
+                : 'Plan {id} needs a person. Run: jevonganize apply {id}',
+              { id: sanitizeLine(plan_id) },
+            ),
           );
         else out(t('{tool} needs a person.', { tool }));
       }

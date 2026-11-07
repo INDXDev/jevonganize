@@ -1,0 +1,4 @@
+# Keep LF on every system: the format check and knip read these files byte for byte.
+* text=auto eol=lf
+# A mail fixture keeps the CRLF that mail uses on the wire.
+test/fixtures/files/mail.eml -text

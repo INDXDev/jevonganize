@@ -347,6 +347,10 @@ export const messages = {
     'プラン {id} は人の承認が必要です。実行: jevonganize apply {id}',
     '计划 {id} 需要人工批准。请运行：jevonganize apply {id}',
   ],
+  'Plan {id} needs a person. Run: jevonganize undo {id}': [
+    'プラン {id} は人の承認が必要です。実行: jevonganize undo {id}',
+    '计划 {id} 需要人工批准。请运行：jevonganize undo {id}',
+  ],
   '{tool} needs a person.': ['{tool} は人の承認が必要です。', '{tool} 需要人工批准。'],
   new: ['新規', '新增'],
   organized: ['整理済み', '已整理'],
