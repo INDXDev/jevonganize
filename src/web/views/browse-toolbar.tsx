@@ -9,7 +9,7 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { FileQuery, Library } from '../../types.ts';
 import { scanFolder } from '../api.ts';
 import { Button } from '../components/ui/button.tsx';
@@ -17,6 +17,7 @@ import { Select } from '../components/ui/field.tsx';
 import { cn, shortPath } from '../lib.ts';
 import { goTo, setView, useActions } from '../tabs.ts';
 import { pathSep, sortOf, type View } from '../view-query.ts';
+import { RefreshButton, RefreshTag } from './tag-refresh.tsx';
 import { ViewMenu } from './view-menu.tsx';
 
 const crumb = (text: string, folder: string | null, last: boolean) => (
@@ -84,6 +85,19 @@ function FilterInput({ view }: { view: View }) {
   );
 }
 
+/** Refresh, when the list is filtered to exactly one tag. */
+function TagRefresh({ view }: { view: View }) {
+  const [open, setOpen] = useState(false);
+  const [tag] = view.tag;
+  if (view.tag.length !== 1 || !tag) return null;
+  return (
+    <>
+      <RefreshButton tag={tag} label onClick={() => setOpen(true)} />
+      {open && <RefreshTag tag={tag} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 function ToolbarActions({ view, query }: { view: View; query: FileQuery }) {
   const { sort, order } = sortOf(query);
   const desc = order === 'desc';
@@ -91,6 +105,7 @@ function ToolbarActions({ view, query }: { view: View; query: FileQuery }) {
   const grid = view.view === 'grid';
   return (
     <div className="flex items-center gap-0.5">
+      <TagRefresh view={view} />
       <Button
         variant="ghost"
         className="h-6"

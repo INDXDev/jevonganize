@@ -103,6 +103,7 @@ function progress(job: Job): void {
     organize: t('Organizing'),
     apply: t('Applying'),
     undo: t('Undoing'),
+    refresh: t('Checking'),
   }[job.kind];
   const end = job.status === 'running' ? '\r' : '\n';
   process.stderr.write(`\x1b[2K${verb} ${count(job.done)}/${count(job.total)}${end}`);

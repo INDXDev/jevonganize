@@ -8,6 +8,7 @@ import { sanitize } from '../core/sanitize.ts';
 import { addAskCommand } from './ask.ts';
 import { addCatalogCommands } from './catalog.ts';
 import { addFileCommands } from './files.ts';
+import { addRefreshCommand } from './refresh.ts';
 import { addSettingsCommands } from './settings.ts';
 import { addSetupCommand } from './setup.ts';
 import { command, type JsonFlag, note, out, outJson, withContext } from './shared.ts';
@@ -57,6 +58,7 @@ export function buildProgram(): Command {
     .action(startCommand);
   addSetupCommand(program);
   addFileCommands(program);
+  addRefreshCommand(program);
   addCatalogCommands(program);
   addSettingsCommands(program);
   addAskCommand(program);

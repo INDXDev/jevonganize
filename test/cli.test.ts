@@ -77,6 +77,7 @@ describe('the documented commands', () => {
       ['similar'],
       ['review'],
       ['suggest'],
+      ['refresh'],
       ['facets', 'list'],
       ['facets', 'show'],
       ['facets', 'enable'],
@@ -155,6 +156,27 @@ describe('scan and read', () => {
     const estimate = await cli(['organize', root, '--dry-run', '--json']);
     expect(JSON.parse(estimate.stdout)).toMatchObject({ files: 1, provider: 'openai' });
     const refused = await cli(['organize', root]);
+    expect(refused.code).toBe(2);
+    expect(refused.stderr).toContain('nothing was sent');
+  });
+});
+
+describe('refresh', () => {
+  test('--dry-run lists candidates and sends nothing, a hostile tag prints safely, and no key refuses', async () => {
+    await writeFile(join(root, 'pwned-notes.txt'), 'hello');
+    await cli(['scan', root]);
+    const tag = 'pwned]0;x';
+    const dry = await cli(['refresh', tag, '--dry-run']);
+    expect(dry.code).toBe(0);
+    expect(dry.stdout).not.toContain('');
+    expect(dry.stdout).toContain('pwned-notes.txt');
+    expect(dry.stdout).toContain('Nothing was sent.');
+    const json = await cli(['refresh', tag, '--dry-run', '--json']);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      tag,
+      candidates: [{ name: 'pwned-notes.txt' }],
+    });
+    const refused = await cli(['refresh', tag]);
     expect(refused.code).toBe(2);
     expect(refused.stderr).toContain('nothing was sent');
   });

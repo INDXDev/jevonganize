@@ -3,6 +3,7 @@ import { getLanguage, setLanguage, t } from '../src/web/i18n/index.ts';
 import { guide } from '../src/web/i18n/guide.ts';
 import { shell } from '../src/web/i18n/shell.ts';
 import { views } from '../src/web/i18n/views.ts';
+import { refresh } from '../src/web/i18n/refresh.ts';
 
 afterEach(() => setLanguage('en'));
 
@@ -13,7 +14,7 @@ const slots = (text: string) =>
 
 describe('interface translations', () => {
   test('every catalog preserves interpolation fields in Japanese and Chinese', () => {
-    for (const [key, translations] of Object.entries({ ...shell, ...views, ...guide })) {
+    for (const [key, translations] of Object.entries({ ...shell, ...views, ...guide, ...refresh })) {
       for (const text of translations) {
         expect({ key, text: text.trim() }).not.toEqual({ key, text: '' });
         expect({ key, slots: slots(text) }).toEqual({ key, slots: slots(key) });
@@ -26,6 +27,8 @@ describe('interface translations', () => {
     expect(
       Object.keys(guide).filter((key) => Object.hasOwn(shell, key) || Object.hasOwn(views, key)),
     ).toEqual([]);
+    const shared = { ...shell, ...views, ...guide };
+    expect(Object.keys(refresh).filter((key) => Object.hasOwn(shared, key))).toEqual([]);
   });
 
   test('explicit language overrides the PC preference and system restores it', () => {

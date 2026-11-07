@@ -21,6 +21,7 @@ const REFRESHED: Partial<Record<ToolName, ToolName[]>> = {
   propose_changes: PLANS,
   rename_tag: PLANS,
   suggest_tags: ['list_reviews', 'get_file', 'status'],
+  refresh_tag: ['status', 'list_reviews'],
   resolve_reviews: [...PLANS, 'list_reviews', 'get_file', 'list_tags', 'cleanup_report'],
   set_vocabulary: ['list_vocabulary', 'list_tags', ...FACETS],
   set_enabled: FACETS,
@@ -49,4 +50,5 @@ export const JOB_READS: ToolName[] = [
   'list_reviews',
   'cleanup_report',
   'estimate',
+  'refresh_candidates',
 ];

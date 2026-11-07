@@ -13,6 +13,7 @@ import { Input, Select } from '../components/ui/field.tsx';
 import { formatCount } from '../lib.ts';
 import { setView, useTabs, useView } from '../tabs.ts';
 import { patchQuery } from '../view-query.ts';
+import { RefreshButton, RefreshTag } from './tag-refresh.tsx';
 
 const ALL = '__all';
 const SHOWN = 500;
@@ -49,8 +50,13 @@ export function Rename(props: { tag: string; onClose: () => void; onPlan: (id: s
   );
 }
 
-function Row(props: { row: TagCount; onRename: () => void; onRemove: () => void }) {
-  const { row, onRename, onRemove } = props;
+function Row(props: {
+  row: TagCount;
+  onRename: () => void;
+  onRemove: () => void;
+  onRefresh: () => void;
+}) {
+  const { row, onRename, onRemove, onRefresh } = props;
   const open = useTabs((s) => s.open);
   return (
     <li className="group flex h-row items-center gap-2 px-3 hover:bg-surface-2">
@@ -71,6 +77,7 @@ function Row(props: { row: TagCount; onRename: () => void; onRemove: () => void 
       >
         <Filter />
       </Button>
+      <RefreshButton tag={row.tag} onClick={onRefresh} />
       <Button
         variant="ghost"
         icon
@@ -164,8 +171,9 @@ function TagRows(props: {
   shown: TagCount[];
   onRename: (tag: string) => void;
   onRemove: (tag: string) => void;
+  onRefresh: (tag: string) => void;
 }) {
-  const { shown, onRename, onRemove } = props;
+  const { shown, onRename, onRemove, onRefresh } = props;
   return (
     <>
       <ul className="py-1">
@@ -175,6 +183,7 @@ function TagRows(props: {
             row={row}
             onRename={() => onRename(row.tag)}
             onRemove={() => onRemove(row.tag)}
+            onRefresh={() => onRefresh(row.tag)}
           />
         ))}
       </ul>
@@ -205,13 +214,14 @@ function TagChanges({ plan, vocabulary }: { plan?: Plan; vocabulary: VocabularyE
   );
 }
 
-/** Tags across the library: `tags list`, `tags rename` and `tags remove`, plus open vocabularies. */
+/** Tags across the library: `tags list`, `tags rename`, `tags remove` and `refresh`, plus open vocabularies. */
 export function Tags() {
   const { folder, facet } = useView();
   const { data: tags = [], isLoading, error } = useTool('list_tags', { folder });
   const { data: vocabulary = [] } = useTool('list_vocabulary', {});
   const [text, setText] = useState('');
   const [renaming, setRenaming] = useState<string>();
+  const [refreshing, setRefreshing] = useState<string>();
   const [planId, setPlanId] = useState<string>();
   const { data: plan } = useTool('get_plan', { id: planId! }, { enabled: !!planId });
 
@@ -243,7 +253,12 @@ export function Tags() {
         title={t('Tags {count}', { count: formatCount(shown.length) })}
         actions={<TagFilters facets={facets} facet={facet} text={text} onText={setText} />}
       >
-        <TagRows shown={shown} onRename={setRenaming} onRemove={(tag) => void remove(tag)} />
+        <TagRows
+          shown={shown}
+          onRename={setRenaming}
+          onRemove={(tag) => void remove(tag)}
+          onRefresh={setRefreshing}
+        />
       </Pane>
       <Divider />
       <Pane id="tag-side" title={t('Changes')} defaultSize="36%" minSize={280}>
@@ -252,6 +267,7 @@ export function Tags() {
       {renaming && (
         <Rename tag={renaming} onClose={() => setRenaming(undefined)} onPlan={setPlanId} />
       )}
+      {refreshing && <RefreshTag tag={refreshing} onClose={() => setRefreshing(undefined)} />}
     </Panes>
   );
 }

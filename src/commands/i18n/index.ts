@@ -1,7 +1,10 @@
 /** Terminal translations, scoped to an invocation so concurrent callers cannot change its language. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Language } from '../../types.ts';
-import { messages } from './messages.ts';
+import { messages as base } from './messages.ts';
+import { refreshMessages } from './refresh.ts';
+
+const messages = { ...base, ...refreshMessages };
 
 type Key = keyof typeof messages;
 type Placeholders<S extends string> = S extends `${string}{${infer P}}${infer Rest}`

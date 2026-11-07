@@ -8,6 +8,7 @@ import { facetTools } from './tools/facets.ts';
 import { fileTools } from './tools/files.ts';
 import { libraryTools } from './tools/libraries.ts';
 import { planTools } from './tools/plans.ts';
+import { refreshTools } from './tools/refresh.ts';
 import { reviewTools } from './tools/reviews.ts';
 import { settingsTools } from './tools/settings.ts';
 import { type Context, isModel, type Tool, type ToolTable } from './tools/shared.ts';
@@ -24,6 +25,7 @@ export const tools: ToolTable = {
   ...catalogTools,
   ...planTools,
   ...reviewTools,
+  ...refreshTools,
   ...settingsTools,
 };
 

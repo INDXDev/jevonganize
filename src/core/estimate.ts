@@ -14,6 +14,17 @@ const CHARS_PER_TOKEN = 4;
 const IMAGE_TOKENS = 800;
 const ESTIMATE_BATCH = 256;
 
+/** Roughly the tokens of sending one file once, with questions of this many characters. */
+export function fileTokens(
+  config: Config,
+  file: { size: number; mime: string | null },
+  questionChars: number,
+): number {
+  const image = (file.mime ?? '').startsWith('image/');
+  const chars = (image ? 0 : Math.min(file.size, config.budget.text_chars)) + questionChars;
+  return (image && config.send_images ? IMAGE_TOKENS : 0) + Math.ceil(chars / CHARS_PER_TOKEN);
+}
+
 /** The model of each profile a run would ask, and `undefined` for the default. */
 function modelTargets(config: Config, asked: Facet[]) {
   const targets = new Map<string | undefined, ModelTarget>([[undefined, modelTarget(config)]]);

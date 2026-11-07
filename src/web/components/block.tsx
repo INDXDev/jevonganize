@@ -226,6 +226,7 @@ const jobTitle = {
   organize: 'Organizing',
   apply: 'Applying plan',
   undo: 'Undoing plan',
+  refresh: 'Checking tag',
 } as const;
 
 const FOUND = [

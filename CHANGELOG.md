@@ -11,6 +11,10 @@ First version, not released yet.
 - `pnpm build` on Windows no longer deletes the web UI it has just built, so the Windows app and a
   package built there have a UI.
 
+- Refresh a tag: the Refresh button on a tag, or `jevonganize refresh <tag>`, finds files that lack
+  it but look like the files that have it, by their words, the tags that go with it and similar
+  files. The decision model checks each one, after an estimate, and the likely ones wait in Review.
+  Nothing is tagged until you accept.
 - Excel and PowerPoint files preview as a drawn page again, not as raw bytes.
 - A double click, or the Open button in the inspector, opens a file in its default app. Executables,
   scripts, links and files with no extension are refused, and Reveal shows them instead.

@@ -176,6 +176,7 @@ const ended: Record<Job['kind'], (job: Job) => string> = {
       : t('Organized {count} files', { count: job.done }),
   apply: (job) => t('Plan applied to {count} files', { count: job.done }),
   undo: (job) => t('Plan undone on {count} files', { count: job.done }),
+  refresh: (job) => t('Checked {count} files for a tag', { count: job.done }),
 };
 
 const invalidate = (...tools: ToolName[]) =>

@@ -414,7 +414,28 @@ param and a text filter. Up to 500 rows show.
 | Show files | Opens a new tab filtered by the tag |
 | Rename or merge | `rename_tag`. The plan appears in Changes, with Apply |
 | Remove from every file | `propose_changes` with `query.tags`. The plan appears in Changes |
+| Refresh | `refresh_candidates`, then `refresh_tag`. See [Refresh](#refresh) |
 | Retire, Activate | `list_vocabulary`, `set_vocabulary`, for values of open facets |
+
+### Refresh
+
+The refresh icon on a tag's row, and Refresh in the browser's title row when the list is filtered to
+exactly one tag, open the same dialog. Both carry `data-tour="tag-refresh"` for the onboarding tour.
+See [Refreshing a tag](tags.md#refreshing-a-tag).
+
+1. **Candidates.** `refresh_candidates` lists the files that lack the tag but look like its files,
+   best first, each with its score and the signals that found it: words, tags that go with it, a
+   similarity, or its name. Above the list: how many files have the tag, how many are candidates,
+   how many were already checked, and the words and tags it learned.
+2. **Estimate.** The send notice and the estimate, as in Organize. At most sets how many to check.
+3. **Check.** Check N files calls `refresh_tag` with the listed ids. The dialog shows the job's block,
+   with its progress and Cancel.
+4. **Review.** When it ends, "N files to review" opens Review on the tag. Nothing is tagged until a
+   person accepts there.
+
+Empty states: with no file tagged yet, only file names were searched; with no candidates, every file
+like these has the tag or was checked. With no key for the provider, Check is off and the dialog
+links to Settings > Keys.
 
 ## Review queue
 
@@ -780,6 +801,7 @@ tool's name does not appear in `web/`.
 | `search`, `show`, `similar` | [Browser](#browser) and inspector |
 | `review`, `cleanup` | [Review queue](#review-queue) |
 | `suggest` | The spark in the inspector's Tags section |
+| `refresh` | [Refresh](#refresh) on a tag in Tags, or in the browser filtered to one tag |
 | `facets` | [Facets editor](#facets-editor) |
 | `config get`, `config set`, `config edit` | [Settings](#settings) |
 | `config path`, `doctor` | Settings > Health |
