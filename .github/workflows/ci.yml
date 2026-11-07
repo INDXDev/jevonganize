@@ -1,0 +1,71 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  # A new push to a pull request replaces its running check. Each commit on main keeps its own.
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+# Actions are pinned by SHA. Renovate (config:best-practices) keeps the SHAs current.
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        # All three, because tag writing differs per platform.
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      # Windows runners would otherwise check out CRLF, which fails the format check.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .node-version, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      # Fails if a check rewrote a tracked file.
+      - run: git diff --exit-code
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      # As in `check`: fixtures must not change on a Windows checkout.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .node-version, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install chromium
+      - run: pnpm build
+      - run: pnpm exec playwright test --project=web
+      # Linux would need a display server.
+      - if: runner.os != 'Linux'
+        run: pnpm exec playwright test --project=electron
+      # The real failure for a package that ships a bin: something missing from the tarball.
+      - name: Check the tarball contents
+        shell: bash
+        run: npm pack --dry-run --json | node scripts/release.ts pack-check
+      - name: Smoke test the packed tarball
+        shell: bash
+        run: |
+          pnpm pack --out "$RUNNER_TEMP/jevonganize.tgz"
+          npm install --global "$RUNNER_TEMP/jevonganize.tgz"
+          # Away from the checkout, so nothing resolves from source. No key is set.
+          cp -R examples/messy-downloads "$RUNNER_TEMP/messy-downloads"
+          cd "$RUNNER_TEMP"
+          export JEVONGANIZE_HOME="$RUNNER_TEMP/home"
+          jevonganize --version
+          jevonganize --help > /dev/null
+          jevonganize scan --json messy-downloads < /dev/null | tail -n 1 > scan.json
+          node -e 'const job = JSON.parse(require("fs").readFileSync("scan.json", "utf8")); if (job.status !== "done" || !(job.scan?.files > 0)) { console.error(job); process.exit(1); }'

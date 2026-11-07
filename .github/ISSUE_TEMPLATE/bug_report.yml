@@ -1,0 +1,40 @@
+name: Bug report
+description: Jevonganize crashed, lost a tag, or tagged a file wrongly
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The command or screen, and the output of `jevonganize doctor`. Remove anything confidential, including file names and contents.
+      render: shell
+    validations: { required: true }
+  - type: input
+    id: versions
+    attributes:
+      label: Jevonganize, Node.js and OS versions
+      placeholder: jevonganize 0.1.0, Node.js 24.22.1, macOS 14
+    validations: { required: true }
+  - type: input
+    id: filesystem
+    attributes:
+      label: File system and volume
+      description: Tags depend on these. Say if the folder is synced or on a network drive.
+      placeholder: APFS, internal disk
+    validations: { required: true }
+  - type: dropdown
+    id: shell
+    attributes:
+      label: Shell
+      options: [Browser, Desktop app, CLI, MCP]
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      description: Leave empty if no model was involved.
+      placeholder: openai/gpt-6-luna

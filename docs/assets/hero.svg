@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" width="900" height="320" role="img" aria-labelledby="t d">
+  <title id="t">Jevonganize</title>
+  <desc id="d">Four unsorted files stay where they are while tags such as doc-type:invoice appear on each one.</desc>
+  <style>
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .name { font-size: 14px; fill: #e6e8eb; }
+    .tag { font-size: 12px; fill: #a9c4ff; }
+    .tags { animation: tags 10s ease infinite backwards; }
+    .r1 { animation-delay: .9s; } .r2 { animation-delay: 1.5s; } .r3 { animation-delay: 2.1s; } .r0 { animation-delay: .3s; }
+    @keyframes tags { 0% { opacity: 0; } 6%, 84% { opacity: 1; } 92%, 100% { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .tags { animation: none; } }
+  </style>
+  <rect width="900" height="320" rx="16" fill="#0e0f11"/>
+
+  <text x="40" y="150" font-size="36" font-weight="700" fill="#e6e8eb">Jevonganize</text>
+  <text x="41" y="184" font-size="15" fill="#a9c4ff">Tags on your files.</text>
+  <text x="41" y="206" font-size="15" fill="#9aa0a8">Nothing moves.</text>
+
+  <g transform="translate(360 54)">
+    <g transform="translate(0 0)">
+      <rect width="500" height="44" rx="8" fill="#16181c" stroke="#2a2d33"/>
+      <text class="name" x="16" y="27">invoice-44.pdf</text>
+      <g class="tags r0">
+        <rect x="176" y="10" width="135" height="24" rx="6" fill="#7aa7ff" fill-opacity=".16"/><text class="tag" x="185" y="26">doc-type:invoice</text>
+        <rect x="319" y="10" width="135" height="24" rx="6" fill="#7aa7ff" fill-opacity=".16"/><text class="tag" x="328" y="26">doc-date:2026-03</text>
+      </g>
+    </g>
+    <g transform="translate(0 56)">
+      <rect width="500" height="44" rx="8" fill="#16181c" stroke="#2a2d33"/>
+      <text class="name" x="16" y="27">document(3).pdf</text>
+      <g class="tags r1">
+        <rect x="176" y="10" width="142" height="24" rx="6" fill="#7aa7ff" fill-opacity=".16"/><text class="tag" x="185" y="26">doc-type:contract</text>
+        <rect x="326" y="10" width="149" height="24" rx="6" fill="#7aa7ff" fill-opacity=".16"/><text class="tag" x="335" y="26">flag:has-signature</text>
+      </g>
+    </g>
+    <g transform="translate(0 112)">
+      <rect width="500" height="44" rx="8" fill="#16181c" stroke="#2a2d33"/>
+      <text class="name" x="16" y="27">IMG_2041.jpg</text>
+      <g class="tags r2">
+        <rect x="176" y="10" width="135" height="24" rx="6" fill="#7aa7ff" fill-opacity=".16"/><text class="tag" x="185" y="26">image-kind:photo</text>
+        <rect x="319" y="10" width="106" height="24" rx="6" fill="#7aa7ff" fill-opacity=".16"/><text class="tag" x="328" y="26">scene:nature</text>
+      </g>
+    </g>
+    <g transform="translate(0 168)">
+      <rect width="500" height="44" rx="8" fill="#16181c" stroke="#2a2d33"/>
+      <text class="name" x="16" y="27">請求書_山田商事.txt</text>
+      <g class="tags r3">
+        <rect x="176" y="10" width="135" height="24" rx="6" fill="#7aa7ff" fill-opacity=".16"/><text class="tag" x="185" y="26">doc-type:invoice</text>
+        <rect x="319" y="10" width="98" height="24" rx="6" fill="#7aa7ff" fill-opacity=".16"/><text class="tag" x="328" y="26">language:ja</text>
+      </g>
+    </g>
+  </g>
+</svg>

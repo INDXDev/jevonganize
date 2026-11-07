@@ -1,0 +1,18 @@
+From: Mira Quill <mira@example.test>
+To: Oren Vale <oren@example.test>, Tess Rowe <tess@example.test>
+Subject: =?UTF-8?B?5riv44Gu5LqI5a6a?=
+Date: Fri, 15 Mar 2024 09:30:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b"
+
+--b
+Content-Type: text/plain; charset=utf-8
+
+The parade route is attached.
+--b
+Content-Type: application/pdf; name="route.pdf"
+Content-Disposition: attachment; filename="route.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQK
+--b--

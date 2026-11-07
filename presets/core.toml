@@ -1,0 +1,125 @@
+pack = "core"
+title = "Core"
+
+[[facet]]
+id = "doc-type"
+title = "Document type"
+kind = "choice"
+instructions = "What kind of document is this? Judge by what the file contains, not by its name."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+weight = 1.5
+
+[facet.values]
+invoice = "A bill that asks for payment still due, with an amount and a payee."
+receipt = "Proof of a payment already made, such as a till slip or a paid confirmation."
+contract = "An agreement that sets out binding terms between named parties, signed or not."
+letter = "A message addressed to a named reader, with a greeting or sign-off, and none of the other purposes here."
+report = "A written account of findings, results or progress, organised in sections."
+form = "A document made of fields or boxes for someone to complete, filled in or blank."
+manual = "Instructions for using, installing or maintaining a product or system."
+statement = "A periodic summary of an account, listing transactions or balances over a span of time."
+certificate = "An issued document that attests to a fact, such as a qualification, a registration or a birth."
+notes = "Informal jottings for the writer's own use, with no finished structure."
+
+[[facet]]
+id = "topic"
+title = "Topic"
+kind = "multi"
+open = true
+instructions = "Is this a subject of the file? It counts only if it covers about a fifth of the content or more. A passing mention does not count."
+weight = 1.5
+
+[facet.values]
+finance = "Money matters that neither finance/tax nor finance/banking covers, such as budgets, spending or investments."
+"finance/tax" = "Taxes: returns, assessments, deductions or payments to a tax authority."
+"finance/banking" = "Bank or card accounts, loans, or transfers between accounts."
+legal = "Rights, obligations, disputes or the law, beyond the routine terms of a purchase."
+health = "A person's physical or mental health, or medical care."
+insurance = "Insurance cover, premiums or claims."
+housing = "A place to live: renting, buying, repairs or household utilities."
+work = "A job or business: employment, colleagues, customers or company operations."
+education = "Schools, courses, study or qualifications."
+travel = "Trips: bookings, itineraries, tickets or places visited."
+family = "Family life and relatives, apart from their health or schooling."
+technology = "Software, hardware or technical systems as the subject itself."
+government = "Dealings with public authorities: permits, registrations or benefits, apart from tax."
+shopping = "Buying consumer goods: orders, deliveries, returns or warranties."
+vehicles = "Cars, motorcycles or bicycles: ownership, servicing or registration."
+hobbies = "Leisure pursuits, such as sport, music, games or crafts."
+
+[[facet]]
+id = "language"
+title = "Language"
+kind = "choice"
+instructions = "In which language is most of the text written? Count the body text, not the file name or metadata."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+weight = 0.25
+
+[facet.values]
+en = "English."
+ja = "Japanese."
+zh = "Chinese, simplified or traditional."
+ko = "Korean."
+de = "German."
+fr = "French."
+es = "Spanish."
+
+[[facet]]
+id = "status"
+title = "Status"
+kind = "choice"
+instructions = "How does this file appear to be used? Judge by what it records, such as open items or closed dates, not by its name."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+weight = 0.5
+
+[facet.values]
+active = "It concerns something still under way, with open items or dates ahead."
+reference = "It holds lasting information to look up, and is tied to no open matter."
+archive = "It records a finished matter, kept only as a past record."
+
+[[facet]]
+id = "importance"
+title = "Importance"
+kind = "level"
+instructions = """What would losing this file cost its owner? \
+none: the question does not apply. \
+low: little or nothing, it could be recreated or fetched again. \
+normal: some effort or inconvenience to replace. \
+high: hard or impossible to replace, such as an original record, a signed agreement or an official document."""
+levels = ["none", "low", "normal", "high"]
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[[facet]]
+id = "is-draft"
+title = "Is a draft"
+kind = "flag"
+instructions = "Is this marked or plainly written as an unfinished draft, with a draft label, tracked comments or placeholder sections? A version number alone does not count."
+applies_to = ["application/*", "text/*"]
+
+[[facet]]
+id = "is-template"
+title = "Is a template"
+kind = "flag"
+instructions = "Is this a blank form or template meant to be filled in? A form already completed does not count."
+applies_to = ["application/*", "text/*"]
+
+[[facet]]
+id = "is-scan"
+title = "Is a scan"
+kind = "flag"
+instructions = "Is this a scan or photo of a paper document? A document created digitally does not count, and neither does a screenshot."
+applies_to = ["application/pdf", "image/*"]
+
+[[facet]]
+id = "has-signature"
+title = "Has a signature"
+kind = "flag"
+instructions = "Does the file show a handwritten or electronic signature? A typed name alone does not count, and neither does an empty signature line."
+applies_to = ["application/*", "image/*"]
+
+[[facet]]
+id = "needs-action"
+title = "Needs action"
+kind = "flag"
+instructions = "Does the file ask its reader to do something specific, such as reply, pay, sign or attend? Advertising and general advice do not count."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]

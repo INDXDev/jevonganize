@@ -1,0 +1,12 @@
+minimumReleaseAge: 4320
+trustPolicy: no-downgrade
+blockExoticSubdeps: true
+strictDepBuilds: true
+allowBuilds:
+  electron: true
+  electron-winstaller: false
+  exifreader: false
+  koffi: false
+  esbuild: false
+  sharp: false
+  tesseract.js: false

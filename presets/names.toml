@@ -1,0 +1,18 @@
+pack = "names"
+title = "Proper names"
+
+[[facet]]
+id = "has-proper-names"
+title = "Names specific things"
+kind = "flag"
+instructions = "Does the file mention at least one specific named person, company, organisation, place, product, event or project?"
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+weight = 0
+
+[[facet]]
+id = "entity"
+title = "Proper name"
+kind = "multi"
+open = true
+instructions = "Is this named thing a subject of the file, or named in it as more than a passing mention?"
+weight = 1.5

@@ -1,0 +1,104 @@
+pack = "legal"
+title = "Legal"
+
+[[facet]]
+id = "contract-type"
+title = "Contract type"
+kind = "choice"
+instructions = "What kind of contract is this? Judge by its terms, not its title. Answer other if it is not a contract."
+applies_to = ["application/*", "image/*"]
+
+[facet.values]
+employment = "Someone is hired as an employee of the other party."
+lease = "A home, premises or equipment is rented for a period."
+sale = "Ownership of goods or property passes for a price."
+service = "Work or services are supplied for a fee, with no employment."
+loan = "Money is lent and must be repaid."
+licence = "Permission is granted to use software, content or other intellectual property."
+
+[[facet]]
+id = "contract-state"
+title = "Contract state"
+kind = "choice"
+instructions = "What stage does this contract show? Judge by marks on the document, not by its name. Answer other if it is not a contract."
+applies_to = ["application/*", "image/*"]
+
+[facet.values]
+draft = "It is not yet signed, or is marked as a draft."
+signed = "It carries the signatures of the parties, and shows no sign of having ended."
+terminated = "It states that the agreement has been ended or cancelled."
+
+[[facet]]
+id = "jurisdiction"
+title = "Jurisdiction"
+kind = "choice"
+instructions = "Which law does the file state governs it? Use a governing-law clause or the issuing authority. Do not guess from language or addresses."
+applies_to = ["application/*", "image/*"]
+
+[facet.values]
+jp = "The law of Japan."
+us = "The law of the United States or one of its states."
+eu = "The law of the European Union or of one of its member states."
+uk = "The law of the United Kingdom or one of its nations."
+
+[[facet]]
+id = "retention"
+title = "Retention"
+kind = "level"
+instructions = """As common practice, how long is a document like this usually kept? This is a hint, not legal advice. \
+none: no retention practice applies. \
+months: until the matter is over. \
+years: for a fixed number of years, such as tax and accounting records. \
+permanent: for life, such as birth, property and qualification records."""
+levels = ["none", "months", "years", "permanent"]
+applies_to = ["application/*", "image/*", "message/*"]
+
+[[facet]]
+id = "record-class"
+title = "Record class"
+kind = "choice"
+instructions = "What kind of formal record is this? Pick the subject the record serves. Answer other if it is not a formal record."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[facet.values]
+personal = "Identity and civil status, such as birth, marriage or residence, apart from the other labels here."
+tax = "Tax returns, assessments and tax payments."
+employment = "Employment history, such as offers, pay terms or termination."
+medical = "Medical history, such as test results and treatment records."
+property = "Ownership of homes, land or vehicles."
+education = "School or university results and qualifications."
+
+[[facet]]
+id = "is-nda"
+title = "Is an NDA"
+kind = "flag"
+instructions = "Is this a non-disclosure agreement in itself? A longer contract that merely has a confidentiality clause does not count."
+applies_to = ["application/*", "image/*"]
+
+[[facet]]
+id = "auto-renews"
+title = "Auto-renews"
+kind = "flag"
+instructions = "Does the file state that the agreement or subscription renews unless someone cancels it? A renewal that needs a new signature or payment choice does not count."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[[facet]]
+id = "is-legal-notice"
+title = "Is a legal notice"
+kind = "flag"
+instructions = "Is this a formal notice, a claim or a summons that has legal effect, such as a demand letter or a court order? Ordinary terms of service and privacy notices do not count."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[[facet]]
+id = "is-certificate"
+title = "Is a certificate"
+kind = "flag"
+instructions = "Is this a certificate or official proof, such as a degree, a registration or a licence? A course completion badge with no issuer does not count."
+applies_to = ["application/*", "image/*"]
+
+[[facet]]
+id = "is-insurance"
+title = "Is insurance"
+kind = "flag"
+instructions = "Is this an insurance policy, a certificate of cover or a claim? An advert for insurance does not count."
+applies_to = ["application/*", "image/*", "message/*"]

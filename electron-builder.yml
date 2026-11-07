@@ -1,0 +1,67 @@
+# Built and run on macOS arm64 only. Windows and Linux targets have not been built. Test the packaged
+# app after any change here, especially onlyLoadAppFromAsar. See docs/security.md#electron.
+appId: com.github.indxdev.jevonganize
+productName: Jevonganize
+directories:
+  output: release
+files:
+  - dist/**
+  - presets/**
+  - package.json
+  # officeparser declares these for OCR and PDF, which are never reached: `ocr` is off, and PDFs go
+  # to unpdf. Checked against every format in test/fixtures/files. Together they are 114 MB.
+  - '!**/node_modules/tesseract.js*/**'
+  - '!**/node_modules/pdfjs-dist/**'
+  - '!**/node_modules/officeparser/dist/officeparser.browser*'
+# Native modules are Node-API prebuilds, so there is no rebuild step.
+npmRebuild: false
+asarUnpack:
+  - node_modules/sharp/**
+  - node_modules/@img/**
+  - node_modules/detect-libc/**
+  - node_modules/semver/**
+  - node_modules/@napi-rs/**
+  - node_modules/koffi/**
+  - node_modules/libheif-js/**
+extraResources:
+  - THIRD_PARTY_NOTICES.md
+electronLanguages:
+  - en
+  - en-US
+  - ja
+  - zh-CN
+electronFuses:
+  runAsNode: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+# Builds are unsigned until a signing identity exists. Apple silicon refuses to run an app with no
+# signature at all, and fuses invalidate Electron's own, so macOS gets an ad-hoc one. It proves
+# nothing about the publisher: people must still allow the app in Privacy & Security. Unsigned
+# builds get no automatic updates.
+mac:
+  identity: '-'
+  hardenedRuntime: false
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: arm64
+  # No version in the names, so README links to releases/latest/download/<name> stay valid.
+  # Keep them in step with DESKTOP in scripts/release.ts.
+  artifactName: Jevonganize-macOS-arm64.${ext}
+win:
+  target:
+    - target: nsis
+      arch: x64
+  artifactName: Jevonganize-Windows-x64-Setup.${ext}
+linux:
+  category: Utility
+  target:
+    - target: AppImage
+      arch: x64
+  artifactName: Jevonganize-Linux-x64.${ext}
+# release.yml creates the draft first. Each platform job adds to it, and a person publishes it.
+publish:
+  provider: github
+  owner: INDXDev
+  repo: jevonganize
+  releaseType: draft

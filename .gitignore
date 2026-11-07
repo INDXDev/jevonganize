@@ -1,0 +1,19 @@
+node_modules/
+dist/
+release/
+coverage/
+test-results/
+playwright-report/
+.claude/
+*.log
+.env*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local audits and measurements
+/internal/
+webdemo/dist/
+webdemo/.vercel/

@@ -1,0 +1,108 @@
+pack = "finance"
+title = "Finance"
+
+[[facet]]
+id = "invoice-state"
+title = "Invoice state"
+kind = "choice"
+instructions = "What is the payment state of this invoice or bill? Judge by what the file records, not by its name. Answer other if it is not an invoice or bill."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[facet.values]
+paid = "It shows the amount was paid: a paid stamp, a zero balance or a payment confirmation."
+unpaid = "It asks for payment that is still due, and shows no sign of payment."
+
+[[facet]]
+id = "amount"
+title = "Amount"
+kind = "level"
+instructions = """How large is the main total in this file, as a plain number in its own currency, whatever that currency is? \
+none: the file states no total. \
+under-100: below 100. \
+100-1k: from 100 to below 1,000. \
+1k-10k: from 1,000 to below 10,000. \
+10k-100k: from 10,000 to below 100,000. \
+over-100k: 100,000 or more."""
+levels = ["none", "under-100", "100-1k", "1k-10k", "10k-100k", "over-100k"]
+applies_to = ["application/*", "image/*", "message/*"]
+
+[[facet]]
+id = "currency"
+title = "Currency"
+kind = "choice"
+instructions = "In which currency is the main total of this file stated? Answer other if it states no amount."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[facet.values]
+jpy = "Japanese yen."
+usd = "US dollars."
+eur = "Euros."
+gbp = "British pounds."
+cny = "Chinese yuan."
+krw = "South Korean won."
+
+[[facet]]
+id = "tax-year"
+title = "Tax year"
+kind = "date"
+precision = "year"
+instructions = "Which tax year does the file state that it relates to? Answer other unless it names a tax year or is a tax document for a stated year."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[[facet]]
+id = "expense-type"
+title = "Expense type"
+kind = "choice"
+instructions = "What was the money in this file mainly spent on? Answer other if it records no spending."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[facet.values]
+travel = "Transport and lodging for a trip, such as fares, hotels or fuel."
+food = "Meals, groceries or drinks."
+rent = "Rent for a home, an office or other premises."
+utilities = "Electricity, gas, water, phone or internet service."
+equipment = "Physical goods meant to last, such as computers, tools or furniture."
+software = "Software licences and online subscriptions."
+medical = "Healthcare, medicine or treatment."
+insurance = "Insurance premiums."
+
+[[facet]]
+id = "payment-method"
+title = "Payment method"
+kind = "choice"
+instructions = "How does the file say the payment was made? Answer other if it does not say."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[facet.values]
+card = "A credit, debit or prepaid card."
+bank-transfer = "A one-off transfer the payer sent from a bank account."
+cash = "Notes and coins."
+direct-debit = "An automatic withdrawal the payee collected from a bank account."
+
+[[facet]]
+id = "is-tax-relevant"
+title = "Is tax-relevant"
+kind = "flag"
+instructions = "Would an accountant need this to prepare an annual tax return, such as a tax form, an income record or a proof of a deductible cost? Everyday consumer purchases do not count."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[[facet]]
+id = "is-reimbursable"
+title = "Is reimbursable"
+kind = "flag"
+instructions = "Is this proof of a cost that an employer, an insurer or a client may pay back, as a claim form, a business trip or a project code shows? A personal purchase with no such sign does not count."
+applies_to = ["application/*", "image/*", "message/*"]
+
+[[facet]]
+id = "is-bank-statement"
+title = "Is a bank statement"
+kind = "flag"
+instructions = "Is this a statement of a bank or card account, listing transactions over a period? A single payment confirmation does not count."
+applies_to = ["application/*", "image/*"]
+
+[[facet]]
+id = "is-payslip"
+title = "Is a payslip"
+kind = "flag"
+instructions = "Is this a payslip or salary statement from an employer, showing pay and deductions? An invoice from a freelancer does not count."
+applies_to = ["application/*", "image/*"]

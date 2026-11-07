@@ -1,0 +1,617 @@
+# CLI reference
+
+Human-facing help, prompts and results follow the global `language` setting (`system` by default).
+Set `language` to `en`, `ja` or `zh-CN` to override the PC language, or back to `system` to follow it.
+Commands, flags, config keys, JSON and MCP data keep their stable names. Shared engine/tool and
+third-party diagnostics may retain their original language. See [Interface language](configuration.md#interface-language).
+
+Every command runs tools in-process, so none needs a running server. Each maps to entries in the
+[tool table](contracts.md#the-tool-table), and the tables below say which.
+
+Every command supports `--help` and `--json`, and `jevonganize --version` prints the version. An
+unknown flag is an error, and every error ends with `Run: <command> --help`.
+
+Jevonganize needs Node.js 24.22.1 or later on the 24 line, or 26.12.1 or later. It refuses older
+versions, because it parses hostile files.
+
+## Output
+
+- stdout carries results only. Warnings, progress and prompts go to stderr.
+- `--json` prints the tool's output unchanged. Commands that run a job print NDJSON: one `Job` per
+  line, about four a second while it runs, and the last line is the final state.
+- Text output is [sanitised](security.md#terminal-output). `--json` keeps the original text, so treat
+  it as untrusted.
+- Colour follows `NO_COLOR` and `FORCE_COLOR`. `DEBUG` with any value prints the stack of an
+  unexpected error.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success. This includes a run where some files failed, which print warnings |
+| 1 | A check failed: `doctor` found a problem, or an `apply` or `undo` left ops failed |
+| 2 | Usage, config or provider error: bad flags, invalid config, no key, rejected key, Node.js too old, or every file in a run failed |
+| 130 | Stopped with Ctrl-C, as a shell reports it. Cached answers stay, and an `organize` stores no plan |
+
+## Command map
+
+| Command | Tools |
+| --- | --- |
+| `jevonganize` | None. Starts `server/start.ts` |
+| `setup` | `set_api_key`, `add_library`, `list_facets`, `set_enabled`, `scan`, `pick_topics`, `set_vocabulary`, `estimate` |
+| `scan` | `add_library` (for a new path), `scan` |
+| `organize` | `estimate`, `organize`, `apply_plan` (unless `--no-apply`) |
+| `plans` | `list_plans`, or `get_plan` with an id |
+| `apply` | `apply_plan` |
+| `undo` | `undo_plan` |
+| `tags list` | `list_tags` |
+| `tags add`, `tags remove` | `propose_changes`, `apply_plan` (with `--apply`) |
+| `tags rename` | `rename_tag`, `apply_plan` (with `--apply`) |
+| `tags tree` | `list_tag_tree` |
+| `tags move` | `move_tag`, `apply_plan` (with `--apply`) |
+| `search` | `search_files` |
+| `show` | `get_file` |
+| `similar` | `similar_files` |
+| `review` | `list_reviews`, `resolve_reviews`, `apply_plan` |
+| `suggest` | `suggest_tags` |
+| `refresh` | `refresh_candidates`, `refresh_tag` (unless `--dry-run`) |
+| `topics pick` | `add_library` and `scan` (for a new path), `pick_topics`, `set_vocabulary` |
+| `topics search` | `search_catalog` |
+| `topics add` | `set_vocabulary` |
+| `names add` | `set_vocabulary` |
+| `folders`, `folders list` | `list_vfolders` |
+| `folders add` | `list_vfolders` (for `--parent`), `save_vfolder` |
+| `folders show` | `list_vfolders`, `vfolder_files` |
+| `folders rm` | `list_vfolders`, `delete_vfolder` |
+| `folders put`, `folders take` | `list_vfolders`, `get_file`, `add_to_vfolder` or `remove_from_vfolder` |
+| `folders suggest` | `suggest_vfolders`, or `suggest_vfolder_tags` with `--tags`, `--tag` or `--not-tag` |
+| `facets list`, `facets show` | `list_facets` |
+| `facets enable`, `facets disable` | `set_enabled` |
+| `config get` | `get_config` |
+| `config set` | `set_config` |
+| `config path`, `config edit` | None. Local file operations |
+| `auth set` | `set_api_key` |
+| `auth list` | `list_keys` |
+| `auth remove` | `remove_api_key` |
+| `auth env` | `set_env_keys`, `list_keys` |
+| `ask` | None directly. Runs `chat()` from `ai/chat.ts`, which calls `agent: true` tools |
+| `cleanup` | `cleanup_report` |
+| `report usage` | `usage_report` |
+| `report library` | `library_report` |
+| `doctor` | `doctor` |
+| `mcp` | Serves every `agent: true` tool. See [llm-native.md](llm-native.md) |
+
+These tools have no command of their own: `status`, `list_libraries`, `list_folders`, `remove_library`,
+`browse_dirs`, `save_facet`, `delete_facet`, `cancel_job`, `reveal_file`, `open_file`, `list_vocabulary`,
+`discard_plan`, `list_favorite_tags`, `set_favorite_tag`. Use
+the UI. Facets can also be edited as
+files, see [presets.md](presets.md), and Ctrl-C stops a job in the terminal.
+
+## Files and queries
+
+A `<file>` argument is a path or a numeric file id. A path is looked up in the index, so an unindexed
+file is an error that suggests `scan`.
+
+Commands marked "query flags" accept these, which fill a `FileQuery`:
+
+| Flag | Field |
+| --- | --- |
+| `--folder <path>` | `folder` |
+| `--tag <tag>` | `tags`. Repeatable, and all must match unless `--tag-match any` says otherwise |
+| `--tag-match <mode>` | `tag_match`: `all` (the default) or `any` |
+| `--not-tag <tag>` | `exclude_tags`. Repeatable |
+| `--mime <type>` | `mime`, such as `application/pdf` or `image/*` |
+| `--status <status>` | `status`: `new`, `organized` or `failed` |
+| `--sort <key>` | `sort`: `name`, `modified`, `size` or `relevance` |
+| `--order <order>` | `order`: `asc` or `desc` |
+| `--limit <n>` | `limit` |
+| `--offset <n>` | `offset` |
+
+## `jevonganize`
+
+Starts the server on `127.0.0.1`, opens the browser at `/auth?t=<token>`, and prints the URL. It runs
+until Ctrl-C. The URL holds the session token, so treat it as a password while the server runs.
+
+| Flag | Description |
+| --- | --- |
+| `--port <n>` | Use this port. Default: `port` from config, or the next free port |
+| `--no-open` | Do not open a browser |
+
+```text
+$ jevonganize
+http://127.0.0.1:53124/auth?t=2f9c...e81a
+```
+
+`--json` prints `{ "url": "..." }`.
+
+## `jevonganize setup`
+
+Asks for a key, a folder and packs, then scans. With a key, it also lets the model choose 100 topics
+from the [catalog](presets.md#topic-catalog), then shows the cost of a first run. It writes no tags. See [getting-started.md](getting-started.md).
+
+| Flag | Description |
+| --- | --- |
+| `--provider <name>` | Provider to set a key for (default: the configured one) |
+| `--folder <path>` | Library to add |
+| `--packs <ids>` | Comma-separated packs to enable |
+| `--yes` | Ask nothing. Needs `--folder`. A key must be stored already or piped to stdin |
+| `--topics` | Choose topics, even with `--yes` |
+| `--no-topics` | Skip choosing topics, so nothing is sent |
+
+Without `--yes`, it needs a terminal.
+
+```text
+$ jevonganize setup
+OpenAI API key: ****************
+Folder to organize: ~/Downloads
+Packs: core, time, sensitivity, media
+Scanned 412 files in ~/Downloads.
+Next: jevonganize organize ~/Downloads --dry-run
+```
+
+## `jevonganize scan [path]`
+
+Updates the index. Free and local: no file content leaves the machine. With no `path`, it scans every
+library. A `path` that is in no library is added as one first.
+
+Files matching the [secret exclusions](security.md#built-in-secret-exclusions) or `exclude` are
+skipped, and the count is reported.
+
+```text
+$ jevonganize scan ~/Downloads
+Scanned ~/Downloads: 412 files, 37 new, 2 changed, 3 restore items.
+Skipped 6 by exclusion rules.
+```
+
+## `jevonganize organize <path>`
+
+Classifies files in a library, produces a plan and applies it. **`--no-apply` stops at the plan, and
+`--dry-run` sends nothing.** This run does call the model, which costs money and sends
+[file data](security.md#what-leaves-your-machine) to the provider. The answers are cached, so the
+money is not spent twice.
+
+`--dry-run` stops earlier: it calls only `estimate`. It makes no model call and stores no plan.
+
+| Flag | Description |
+| --- | --- |
+| `--dry-run` | Print the `Estimate` and stop. Needs no key |
+| `--no-apply` | Stop at the plan and write no tags. By default it applies when ready |
+| `--apply` | Apply the plan when it is ready. This is the default |
+| `--facets <ids>` | Comma-separated facet ids or packs, replacing the enabled set for this run |
+| `--limit <n>` | Organize at most this many files |
+
+`--dry-run` with `--apply` is a usage error. `path` must be in a library, so run `scan` on it first.
+With no key for the provider, the command refuses to start. It never falls back to another provider.
+
+The estimate goes to stderr before the first model call. It counts input tokens only; output is not
+included, as it depends on the answers. Ctrl-C cancels: cached answers stay, and no
+plan is stored.
+
+```text
+$ jevonganize organize ~/Downloads --dry-run
+412 files, 38 cached, 9 facets
+About 1.4M tokens, about $0.14 on openai gpt-6-luna
+Nothing was sent.
+
+$ jevonganize organize ~/Downloads
+About 1.4M tokens, about $0.14 on openai gpt-6-luna
+Organizing 412/412
+Plan 7f3a9c21: organize ~/Downloads
+  387 files, 1,204 tags added, 0 removed
+  doc-type:invoice      61
+  doc-type:photo       140
+  doc-date:2026         88
+  ...
+52 items need review: jevonganize review
+Applied 7f3a9c21: 387 files, 1,204 tags added.
+Undo: jevonganize undo 7f3a9c21
+```
+
+`--dry-run --json` prints the `Estimate`. Otherwise `--json` prints NDJSON `Job` lines, and the last
+`organize` line holds `plan_id`. Unless you pass `--no-apply`, the `apply` job's lines follow.
+
+## `jevonganize plans [id]`
+
+Lists plans, newest first. With an `id`, prints that plan's summary, and with `--json`, the whole
+`Plan`.
+
+| Flag | Description |
+| --- | --- |
+| `--status <status>` | `proposed`, `applying`, `applied`, `undone` or `failed` |
+
+```text
+$ jevonganize plans --status proposed
+7f3a9c21  organize  387 files  +1,204 -0  organize ~/Downloads
+c40de117  mcp        61 files  +61 -0     Tag tax documents
+```
+
+## `jevonganize apply <id>`
+
+Applies a stored plan. For each op it reads the file's tags fresh, merges, writes, and updates the
+index. Exit 1 if any op failed. The others stay applied.
+
+```text
+$ jevonganize apply 7f3a9c21
+Applied 7f3a9c21: 387 files, 1,204 tags added.
+Undo: jevonganize undo 7f3a9c21
+```
+
+## `jevonganize undo <id>`
+
+Reverses an applied plan, merging into a fresh read of each file's tags. Exit 1 if any op failed.
+
+```text
+$ jevonganize undo 7f3a9c21
+Undid 7f3a9c21: 387 files.
+```
+
+`--json` on `apply` and `undo` prints NDJSON `Job` lines.
+
+## `jevonganize tags`
+
+`add`, `remove`, `rename` and `move` store a plan and print it. They change nothing unless you pass
+`--apply`. `organize` is different: it applies unless you pass `--no-apply`. `<path>` is a file or a folder.
+
+| Command | Description |
+| --- | --- |
+| `tags list` | Tags with counts. `--folder <path>` and `--facet <id>` narrow it |
+| `tags add <path> <tag...>` | Plan to add tags. Takes query flags to narrow the files |
+| `tags remove <path> <tag...>` | Plan to remove tags. Takes query flags |
+| `tags rename <from> <to>` | Plan to rename a tag on every file that has it. `--children` renames every tag under it too |
+| `tags tree` | Tags as a tree: a facet's root, then each `/` level indented. `--folder <path>` and `--facet <id>` narrow it |
+| `tags move <tag>` | Plan to move a tag, and every tag under it, `--under <parent>` or to the `--top` of its facet. Give exactly one |
+
+| Flag | Description |
+| --- | --- |
+| `--apply` | On `add`, `remove`, `rename` and `move`: apply the plan at once |
+
+```text
+$ jevonganize tags list --facet doc-type
+doc-type:photo      140
+doc-type:invoice     61
+doc-type:receipt     33
+
+$ jevonganize tags add ~/Downloads project:acme --tag doc-type:invoice
+Plan a18b02f4: add project:acme
+  61 files, 61 tags added, 0 removed
+Nothing was written. Run: jevonganize apply a18b02f4
+
+$ jevonganize tags rename doc-type:bill doc-type:invoice --apply
+Plan 90be77d3: rename doc-type:bill to doc-type:invoice
+Applied 90be77d3: 4 files.
+
+$ jevonganize tags tree --facet topic
+topic:                          48
+  finance                       31  (6 on the tag itself)
+    tax                         25
+  tax                           12
+
+$ jevonganize tags move topic:tax --under topic:finance
+Plan 3c0e9a12: move topic:tax under topic:finance
+  12 files, 12 tags added, 12 removed
+  9 files merge into existing topic:finance/tax
+Nothing was written. Run: jevonganize apply 3c0e9a12
+```
+
+A line shows the files carrying the tag or a tag under it, and in brackets those carrying the tag
+itself when they differ. A parent no file carries itself, such as `finance` above without the
+brackets, is implicit. Only open facets, such as `topic`, `party` and `project`, and plain tags move;
+a tag never moves to another facet. When the plan is applied, the vocabulary and virtual folders that
+name the old paths follow, and `undo` puts them back. See [tags.md](tags.md#hierarchy).
+
+Invalid tags are refused. Grammar is in [tags.md](tags.md).
+
+## `jevonganize search [text]`
+
+Searches the index by text and file name. Takes query flags. Default `--limit` is 50.
+
+```text
+$ jevonganize search "acme" --tag doc-type:invoice --sort modified --order desc
+~/Downloads/invoice-44.pdf   212 KB  2026-03-02  doc-type:invoice doc-date:2026-03 +1
+~/Downloads/invoice-43.pdf   198 KB  2026-02-03  doc-type:invoice doc-date:2026-02 +1
+2 of 2 files
+```
+
+## `jevonganize show <file>`
+
+Prints a file's `FileDetail`: facts, tags, metadata, answers and pending reviews.
+
+```text
+$ jevonganize show ~/Downloads/invoice-44.pdf
+~/Downloads/invoice-44.pdf  (id 1042)
+PDF, 212 KB, modified 2026-03-02, organized
+Tags     doc-type:invoice  doc-date:2026-03  project:acme
+Answers  doc-type invoice 0.97 / invoice-state unpaid 0.62
+Review   invoice-state:unpaid 0.62
+```
+
+## `jevonganize similar <file>`
+
+Lists similar files, best first.
+
+| Flag | Description |
+| --- | --- |
+| `--limit <n>` | Files to list (default 20) |
+
+```text
+$ jevonganize similar ~/Downloads/invoice-44.pdf --limit 2
+0.94  ~/Downloads/invoice-43.pdf  doc-type:invoice project:acme
+0.91  ~/Downloads/invoice-41.pdf  doc-type:invoice project:acme
+```
+
+## `jevonganize review`
+
+Lists items waiting for a person, or resolves them. Accepting writes tags at once.
+
+| Flag | Description |
+| --- | --- |
+| `--tag <tag>` | Only this tag |
+| `--limit <n>` | Items to list |
+| `--accept <ids>` | Accept comma-separated ids, or `all`, which needs `--tag` |
+| `--reject <ids>` | Reject comma-separated ids, or `all`, which needs `--tag` |
+
+```text
+$ jevonganize review
+invoice-state:unpaid (14)
+  301  0.62  ~/Downloads/scan-0041.pdf
+  302  0.66  ~/Downloads/IMG_2231.jpg
+  ...
+restore: doc-type:contract (1)
+  317  n/a   ~/Downloads/contract.docx  Tag gone after a save
+
+$ jevonganize review --tag invoice-state:unpaid --accept all
+Accepted 14 items.
+```
+
+## `jevonganize suggest <file>`
+
+Asks the `[chat]` model for candidate tags, and adds them to the review queue. It sends the file's
+extracted state to that provider, and sends it again to `[provider]`, which verifies each candidate.
+So both need a key. It writes no tag.
+
+```text
+$ jevonganize suggest ~/Downloads/invoice-44.pdf
+Added 2 review items:
+  318  project:acme
+  319  party:acme-corp
+```
+
+## `jevonganize refresh <tag>`
+
+Finds files that lack a tag but look like the files that have it, asks the `[provider]` decision
+model whether each one should carry it, and adds the yeses to the review queue. Finding them is
+local and free. Checking them sends each file's extracted state, as `organize` does. It writes no
+tag: accept the items with `review`. See [Refreshing a tag](tags.md#refreshing-a-tag).
+
+| Flag | Description |
+| --- | --- |
+| `--limit <n>` | Check at most this many files. 50 by default, at most 200 |
+| `--dry-run` | List the candidates and the estimate, and stop. Sends nothing and needs no key |
+
+`--json` prints the candidates with `--dry-run`, and the job as NDJSON otherwise.
+
+```text
+$ jevonganize refresh doc-type:invoice --dry-run
+doc-type:invoice: 14 files have it, 3 candidates, 2 already checked
+  0.62  ~/Downloads/scan-0102.pdf  invoice total due party:acme
+  0.41  ~/Downloads/IMG_3001.jpg  party:acme similar 0.48
+  0.10  ~/Downloads/invoice-old.txt  name
+About 2.1K tokens, about $0.00 on openai gpt-6-luna
+Nothing was sent.
+
+$ jevonganize refresh doc-type:invoice
+doc-type:invoice: 14 files have it, 3 candidates, 2 already checked
+  ...
+2 files to review: jevonganize review --tag doc-type:invoice
+```
+
+## `jevonganize topics`
+
+```sh
+jevonganize topics pick [path] [--limit <n>] [--dry-run]
+jevonganize topics search <text> [--limit <n>]
+jevonganize topics add <values...>
+```
+
+`topics pick` starts from the current folder by default, and adds and scans it if it is in no library.
+It sends the folder's file names to `[provider]`, asks about every topic in the
+[catalog](presets.md#topic-catalog), and adds the 100 likeliest to `topic` with no further step.
+`--dry-run` prints them and changes nothing. `setup` and the first screen of the UI run this too.
+
+## `jevonganize names add`
+
+```sh
+jevonganize names add organization "Acme Corp"
+```
+
+Registers a proper name. Its kind is `person`, `organization`, `place`, `product`, `project` or
+`event`. The next `organize` asks about it for every file. `organize` also reads names out of files by
+itself, and there is no separate run. The Names section of the UI's Tags screen lists and removes them.
+
+## `jevonganize folders`
+
+[Virtual folders](concepts.md#virtual-folders): saved tag rules that collect files on their own.
+Nothing on disk moves. A `<folder>` is an id, a name, or a path of names such as `Taxes/2025`; an id
+wins over a name made of digits.
+
+| Command | Description |
+| --- | --- |
+| `folders` | The saved tree: name, file count, rule, home tag and id. `--auto` adds the generated folders, one per tag namespace and value |
+| `folders add <name>` | Save a folder. `--tag` repeats, and a file needs any of them unless `--all`. `--not-tag` leaves files out. `--parent <folder>` nests it, which narrows it. `--home <tag>` sets the home tag. `--folder <path>` keeps it to a library folder |
+| `folders show <folder>` | The files in a folder, or in a generated one by its tag, such as `topic:finance` or `topic:`. `--limit` and `--offset` page |
+| `folders rm <folder>` | Delete a folder and the folders inside it. No file or tag changes |
+| `folders put <folder> <file...>` | Plan to add the home tag, and those of the folders above. Prints the plan; `apply` runs it |
+| `folders take <folder> <file...>` | Plan to remove the folder's home tag |
+| `folders suggest` | Folders worth saving: name, file count, rule and why (`large-tag`, `pair` or `namespace`). With `--tags`, or any `--tag` or `--not-tag`, it suggests tags for that rule instead: how many files match it, then each tag with its files in the rule over all its files, and why (`narrows`, `favorite`, `recent` or `common`). `--all` and `--folder` shape the rule as in `folders add`, and `--limit` caps the list. Reads tag counts only: no model, nothing sent. See [contracts.md](contracts.md#the-tool-table) |
+
+```text
+$ jevonganize folders add Taxes --tag topic:finance/tax
+Saved folder Taxes (id 1).
+Files put in it get topic:finance/tax.
+
+$ jevonganize folders add 2025 --parent Taxes --tag doc-date:2025
+$ jevonganize folders
+Taxes  14  topic:finance/tax  → topic:finance/tax  #1
+  2025  6  doc-date:2025  → doc-date:2025  #2
+
+$ jevonganize folders suggest --limit 3
+finance / tax  14  topic:finance/tax  large-tag
+2025 × finance / tax  6  doc-date:2025 & topic:finance/tax  pair
+finance  20  topic:finance  namespace
+
+$ jevonganize folders suggest --tag topic:finance
+20 files match this rule.
+topic:finance/tax  14/14  narrows
+doc-date:2025  9/31  narrows
+
+$ jevonganize folders put Taxes/2025 ~/Downloads/receipt.pdf
+Plan 5c1e9a02: Add to folder 2025
+  1 files, 2 tags added, 0 removed
+Nothing was written. Run: jevonganize apply 5c1e9a02
+```
+
+## `jevonganize facets`
+
+| Command | Description |
+| --- | --- |
+| `facets list` | Packs and facets, with `*` on enabled ones |
+| `facets show <id>` | One facet: kind, question, labels, `applies_to` |
+| `facets enable <ids...>` | Enable packs or facets |
+| `facets disable <ids...>` | Disable packs or facets |
+
+```text
+$ jevonganize facets list
+* core      doc-type, topic, language, status
+* time      doc-date, period, event-date
+  finance   invoice-state, amount, currency, tax-year
+```
+
+## `jevonganize config`
+
+| Command | Description |
+| --- | --- |
+| `config get [key]` | Print the config, or one key such as `thresholds.apply`. No keys or secrets are in it |
+| `config set <key> <value>` | Validate and save one key. The value is parsed as TOML |
+| `config path` | Print the config, data and cache paths |
+| `config edit` | Open the config in `$VISUAL` or `$EDITOR` (default `vi`, or `notepad` on Windows), then validate. An invalid file is never saved |
+
+```text
+$ jevonganize config set thresholds.apply 0.9
+thresholds.apply = 0.9
+
+$ jevonganize config set exclude '["node_modules", ".git", "*.tmp", "Archive"]'
+```
+
+`--json` on `config get` prints the tool's output: the config and its JSON Schema. See
+[configuration.md](configuration.md).
+
+## `jevonganize auth`
+
+| Command | Description |
+| --- | --- |
+| `auth set <provider>` | Prompt for a key and store it. Pipe the key in for scripts. It is never a flag, which would land in shell history |
+| `auth list` | Show each provider and where its key comes from. Keys are never printed |
+| `auth remove <provider>` | Delete a stored key |
+| `auth env on\|off` | Allow or refuse keys from environment variables. Off until you allow it |
+
+```text
+$ jevonganize auth list
+openai      file
+typesafe    none
+openrouter  env
+```
+
+## `jevonganize ask "<natural language>"`
+
+Runs one request through the chat model, with the same tools as the chat panel. It can search and
+propose, and a plan needs a person. See [llm-native.md](llm-native.md#ask).
+
+In a terminal, `ask` shows the plan and asks `Apply? [y/N]`. In a pipe, it prints the plan id and
+stops, so `apply` stays a separate step.
+
+```text
+$ jevonganize ask "tag all 2026 scans from Acme as invoices"
+search_files: 214 matches
+Plan 3e1fb9a0: add doc-type:invoice
+  214 files, 211 tags added, 0 removed
+Apply? [y/N]
+```
+
+`--json` prints NDJSON, one event per line: `{ "type": "text", "text" }`,
+`{ "type": "tool", "tool", "input", "output" }`, and `{ "type": "needs_approval", "tool", "plan_id" }`. `plan_id` is missing when the tool has no plan.
+
+## `jevonganize cleanup`
+
+Prints the `cleanup_report`: near-duplicate tags, tags on one file, over-broad tags, and redundant
+parents, a tag carried with its own parent on the same files. It changes nothing. Act on it with
+`tags rename`, or drop a redundant parent with `tags remove <path> <parent> --tag <tag>`.
+
+```text
+$ jevonganize cleanup
+Near-duplicates
+  project:acme / project:acme-corp   15
+One file
+  topic:rugby
+Over-broad
+  doc-type:document   on 71% of files
+Redundant parents
+  topic:finance/tax with topic:finance   4 files
+```
+
+## `jevonganize report`
+
+```sh
+jevonganize report usage [--since <date>] [--until <date>] [--bucket day|week|month]
+jevonganize report library
+```
+
+Free and local: both read the index and send nothing.
+
+`report usage` prints the model calls recorded on this machine: calls, tokens in and out, and the
+estimated cost, in total, then one line per bucket, per feature and per model. Every call is recorded,
+from organize, refresh, suggest, topic picks, proper names and chat. `--since` and `--until` take a
+local day such as `2026-11-01`; `--until` is left out of the range. Left out, the range is every row
+kept, which is the last 365 days. A bad date or bucket exits 2. Costs are estimates from the built-in
+price table; calls with no known price are counted, not priced. `organize-cache` lines count files
+served from the cache, which made no call.
+
+```text
+$ jevonganize report usage --since 2026-11-01 --bucket week
+412 calls, 1.2M tokens in, 8.3K out, about $0.12
+  2026-11-02  398 calls, 1.1M tokens in, 7.9K out, about $0.11
+  2026-11-09  14 calls, 52K tokens in, 410 out, about $0.01 (2 calls with no known price)
+  chat  2 calls, 4.1K tokens in, 380 out, about $0.00 (2 calls with no known price)
+  organize  410 calls, 1.2M tokens in, 7.9K out, about $0.12
+  openai gpt-6-luna  412 calls, 1.2M tokens in, 8.3K out, about $0.12
+```
+
+`report library` prints each library's files by state, the files by kind, the ten most used tags, the
+open reviews, the plans by status, and the answer cache: its size and the share of files organized in
+the last 30 days that cost no model call.
+
+`--json` on either prints the tool's output unchanged: `UsageReport` or `LibraryReport` in
+[contracts.md](contracts.md). Tags, paths and model ids are sanitized in the text output only.
+
+## `jevonganize doctor`
+
+Checks the runtime, the key, each library's volume and optional tools. Exit 1 if a required check
+fails. A missing optional tool does not fail it.
+
+```text
+$ jevonganize doctor
+ok    Node.js 24.22.1
+ok    openai key present (file)
+ok    ~/Documents can store tags
+FAIL  /Volumes/USB cannot store tags
+note  ffmpeg not found: video keyframes are skipped
+note  soffice not found
+```
+
+## `jevonganize mcp`
+
+Runs the MCP server over stdio, for coding agents. stdout carries only MCP messages. Clients start
+this command, so you rarely run it yourself. See [llm-native.md](llm-native.md#mcp-server).
+
+| Flag | Description |
+| --- | --- |
+| `--allow-apply` | Let every tool that needs approval run with no person: `apply_plan`, `undo_plan`, `discard_plan`, `resolve_reviews`, `organize`, `suggest_tags`, `refresh_tag` and `pick_topics`. Off by default |

@@ -1,0 +1,79 @@
+pack = "housekeeping"
+title = "Housekeeping"
+
+[[facet]]
+id = "quality"
+title = "Quality"
+kind = "level"
+instructions = """How legible is this scan or image? \
+none: the question does not apply. \
+poor: details or text cannot be made out. \
+usable: it can be read or understood with some effort. \
+good: sharp and easy to read."""
+levels = ["none", "poor", "usable", "good"]
+applies_to = ["image/*", "application/pdf"]
+
+[[facet]]
+id = "is-blank"
+title = "Is blank"
+kind = "flag"
+instructions = "Does the file have almost no content, such as an empty page or a few stray words? A short but complete note does not count."
+
+[[facet]]
+id = "looks-broken"
+title = "Looks broken"
+kind = "flag"
+instructions = "Is the content garbled or cut off, such as unreadable characters or a text that stops mid-sentence? Foreign-language text does not count. Text cut by the extract budget does not count."
+
+[[facet]]
+id = "is-encrypted"
+title = "Is encrypted"
+kind = "field"
+field = "encrypted"
+
+[[facet]]
+id = "is-installer"
+title = "Is an installer"
+kind = "flag"
+instructions = "Is this an installer or a disk image for software, judging by the metadata and any listed contents? An ordinary archive of documents does not count."
+applies_to = ["application/*"]
+
+[[facet]]
+id = "is-temporary"
+title = "Is temporary"
+kind = "flag"
+instructions = "Is this a cache, a log or a scratch file that a program or a person made for short-term use? Saved notes do not count."
+
+[[facet]]
+id = "is-marketing"
+title = "Is marketing"
+kind = "flag"
+instructions = "Is this an advert, a newsletter or a promotion sent to many people? A personal sales email to one named reader does not count."
+applies_to = ["application/*", "text/*", "message/*", "image/*"]
+
+[[facet]]
+id = "is-superseded"
+title = "Is superseded"
+kind = "flag"
+instructions = "Does the file itself state that a newer version replaces it? An old date alone does not count."
+applies_to = ["application/*", "text/*", "message/*"]
+
+[[facet]]
+id = "looks-like-copy"
+title = "Looks like a copy"
+kind = "flag"
+instructions = "Does the name in metadata suggest a copy, with a marker such as (1), copy or final2? This question is about the name alone, and the content does not matter."
+
+[[facet]]
+id = "archive-content"
+title = "Archive content"
+kind = "choice"
+instructions = "What does this archive mainly contain, judging by its listed entries? Answer other if it is not an archive."
+applies_to = ["application/zip", "application/x-*", "application/gzip"]
+
+[facet.values]
+photos = "Mostly images."
+documents = "Mostly office files, PDFs or text."
+code = "Mostly source code and project files."
+installers = "Mostly programs or installers."
+mixed = "No single kind makes up most of the entries."

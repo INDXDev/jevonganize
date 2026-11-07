@@ -1,0 +1,95 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "import/no-cycle": "error",
+    "import/no-duplicates": "error",
+    "no-console": "off",
+    "react/react-in-jsx-scope": "off",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "electron",
+            "message": "Only src/desktop may import electron."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["ai", "@ai-sdk/*"],
+            "message": "Only src/ai may import the AI SDK."
+          }
+        ]
+      }
+    ],
+    "typescript/no-unsafe-type-assertion": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/ai/**", "src/desktop/**", "test/**", "e2e/**"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["src/core/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "electron",
+                "message": "Only src/desktop may import electron."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["ai", "@ai-sdk/*"],
+                "message": "Only src/ai may import the AI SDK."
+              },
+              {
+                "regex": "/(server|web|commands|desktop)/",
+                "message": "core must not import upward."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/web/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "/(core|ai|commands|server|desktop|extract)/",
+                "allowTypeImports": true,
+                "message": "web reaches the server over HTTP; type imports only."
+              },
+              {
+                "regex": "^node:",
+                "message": "web runs in the browser."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
