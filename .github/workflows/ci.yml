@@ -38,6 +38,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
+      # As in `check`: fixtures must not change on a Windows checkout.
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -50,8 +52,19 @@ jobs:
       - if: runner.os == 'macOS'
         run: pnpm exec playwright test --project=electron
       # The real failure for a package that ships a bin: something missing from the tarball.
+      - name: Check the tarball contents
+        shell: bash
+        run: npm pack --dry-run --json | node scripts/release.ts pack-check
       - name: Smoke test the packed tarball
+        shell: bash
         run: |
-          pnpm pack --out jevonganize.tgz
-          npm install --global ./jevonganize.tgz
+          pnpm pack --out "$RUNNER_TEMP/jevonganize.tgz"
+          npm install --global "$RUNNER_TEMP/jevonganize.tgz"
+          # Away from the checkout, so nothing resolves from source. No key is set.
+          cp -R examples/messy-downloads "$RUNNER_TEMP/messy-downloads"
+          cd "$RUNNER_TEMP"
+          export JEVONGANIZE_HOME="$RUNNER_TEMP/home"
           jevonganize --version
+          jevonganize --help > /dev/null
+          jevonganize scan --json messy-downloads < /dev/null | tail -n 1 > scan.json
+          node -e 'const job = JSON.parse(require("fs").readFileSync("scan.json", "utf8")); if (job.status !== "done" || !(job.scan?.files > 0)) { console.error(job); process.exit(1); }'

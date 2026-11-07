@@ -140,6 +140,7 @@ field = "author"
 | `media` | Photos, screenshots, audio | Yes |
 | `work` | Office and technical files | No |
 | `housekeeping` | Clutter | No |
+| `names` | Proper names in a file | Always asked by `organize`, whether enabled or not |
 
 ### core
 
@@ -323,9 +324,10 @@ Facets not listed use `weight = 1`.
 | Facets | Weight |
 | --- | --- |
 | `project` | 2 |
-| `party`, `doc-type`, `topic` | 1.5 |
+| `party`, `doc-type`, `topic`, `entity` | 1.5 |
 | `status` | 0.5 |
 | `language` and all of `sensitivity` | 0.25 |
+| `has-proper-names` | 0 |
 
 These starting values are judgements.
 
@@ -476,8 +478,10 @@ each new name does not become one more question for every file.
 2. Code normalizes each candidate: lowercase, kebab-case, at most 64 characters. It drops anything that
    is not `<open facet>:<value>`, is already active or retired, or breaks the grammar. It keeps at most
    8.
-3. A person accepts or rejects in the review queue, grouped by tag.
-4. An active value joins the facet's `values`, with the definition `The file clearly concerns "<value>".`
+3. The `[provider]` decision model asks one yes-or-no question per candidate, and keeps only those at
+   0.8 or above.
+4. A person accepts or rejects in the review queue, grouped by tag.
+5. An active value joins the facet's `values`, with the definition `The file clearly concerns "<value>".`
 
 Two values that mean one thing are merged with an alias. `cleanup_report` lists near-duplicates,
 one-file tags and tags on over half of all files.
@@ -547,7 +551,7 @@ first, and every change that writes tags goes through a plan.
 | Rename a label | 0 | Add an alias and keep the old label in `values`, then `rename_tag` rewrites disk |
 | Merge two labels | 0 | Alias one to the other, then `rename_tag` |
 | Add, edit or remove a `field` facet | 0 | Derived from stored metadata |
-| Disable or remove a facet | 0 | A `cleanup` plan removes its AI tags. Human tags stay |
+| Disable or remove a facet | 0 | Its tags stay on files until you remove them, for example with `tags remove` |
 | Move, or copy with the same name | 0 | The state is unchanged, so the answer key matches |
 | Add a facet, or enable a pack | One per file in scope | The file's state is sent again, so it is billed again |
 | Add a label, or accept a vocabulary value | One per file in scope | `facetHash` changed |

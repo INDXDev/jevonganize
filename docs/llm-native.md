@@ -17,7 +17,7 @@ Tools with `agent: true` are offered to chat and MCP. Tools with `agent: false` 
 
 | Group | Tools |
 | --- | --- |
-| Read | `status`, `list_libraries`, `search_files`, `get_file`, `similar_files`, `list_tags`, `list_facets`, `list_vocabulary`, `search_catalog`, `estimate`, `get_plan`, `list_plans`, `list_reviews`, `cleanup_report`, `doctor` |
+| Read | `status`, `list_libraries`, `list_folders`, `search_files`, `get_file`, `similar_files`, `list_tags`, `list_facets`, `list_vocabulary`, `search_catalog`, `estimate`, `get_plan`, `list_plans`, `list_reviews`, `cleanup_report`, `doctor` |
 | Propose (stores a plan) | `propose_changes`, `rename_tag` |
 | Run (local, no tags written) | `scan` |
 | Needs approval | `apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `pick_topics`, `resolve_reviews`, `discard_plan` |
@@ -26,8 +26,8 @@ Tools with `agent: true` are offered to chat and MCP. Tools with `agent: false` 
 The last row is a security boundary. A model cannot reach keys or config, add a folder, or browse the
 disk. It sees only what is already in a library.
 
-`organize` and `suggest_tags` write no tags, but they need approval because they send file data to
-your provider and cost money. A hostile file name must not be able to start that. `resolve_reviews`
+`organize`, `suggest_tags` and `pick_topics` need approval because they send file data or file names
+to your provider and cost money. A hostile file name must not be able to start that. `resolve_reviews`
 and `discard_plan` need it because they can delete work only a person should drop, such as the
 `restore` item that is the last record of a lost tag.
 
@@ -44,8 +44,8 @@ Every bulk change is stored first and runs later, in this order.
 
 ## Approval gate
 
-`apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `resolve_reviews` and `discard_plan` have
-`approval: true`. Nothing a model says can skip this, because the check is in the front end and not in the prompt.
+`apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `pick_topics`, `resolve_reviews` and
+`discard_plan` have `approval: true`. Nothing a model says can skip this, because the check is in the front end and not in the prompt.
 
 | Front end | What happens when a model calls one |
 | --- | --- |
@@ -62,7 +62,7 @@ The MCP result, as text content in the tool response:
   "message": "A person must approve this in Jevonganize's Review queue, or with: jevonganize apply 7f3a9c21" }
 ```
 
-`organize`, `suggest_tags` and `resolve_reviews` have no plan yet, so their result leaves out
+`organize`, `suggest_tags`, `pick_topics` and `resolve_reviews` have no plan yet, so their result leaves out
 `plan_id`. `resolve_reviews` and `discard_plan` point to the Review queue, where a person decides.
 
 ### Limits of the gate
@@ -71,7 +71,7 @@ The MCP result, as text content in the tool response:
   no person in the loop. Use it only on files you trust.
 - An agent with a shell can run `jevonganize apply <id>` itself. The CLI treats its caller as a
   person. If you want the gate, do not give that agent permission to run `apply`, `undo`, `review
-  --accept`, or any command with `--apply`.
+  --accept` or `--reject`, `organize` without `--no-apply`, or any command with `--apply`.
 
 ## Chat panel
 
@@ -115,7 +115,8 @@ so the DNS rebinding attacks on localhost MCP servers do not apply.
   Concurrent use was not tested.
 - stdout carries only MCP messages. Logs go to stderr.
 - A tool with `writes: false` is marked `readOnlyHint`.
-- Results are capped, so `search_files` defaults to 50 rows and returns ids to follow up on.
+- Results are capped. `search_files` defaults to 50 rows, a model gets at most 200, and it returns
+  ids to follow up on.
 - Plans made through MCP have `source: 'mcp'`.
 
 ### Connecting a client
@@ -159,7 +160,7 @@ A safe loop for an agent:
 
 ```sh
 jevonganize organize ~/Downloads --dry-run --json     # cost first
-jevonganize organize ~/Downloads --json | tail -n 1   # read plan_id
+jevonganize organize ~/Downloads --no-apply --json | tail -n 1   # read plan_id. Nothing is written
 jevonganize plans 7f3a9c21 --json                     # show a person
 ```
 

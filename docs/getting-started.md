@@ -7,7 +7,8 @@ Jevonganize never moves, renames, edits or deletes a file. It only writes tags.
 
 ## Install
 
-**With Node.js.** You need Node.js 24.22.1 or later. Older releases are refused.
+**With Node.js.** You need Node.js 24.22.1 or later on the 24 line, or 26.12.1 or later. Older
+releases, and Node.js 25, are refused.
 
 ```sh
 npx jevonganize
@@ -19,11 +20,16 @@ This starts a local server and opens your browser. To keep it installed:
 npm install -g jevonganize
 ```
 
-**Desktop app.** Download it from GitHub Releases. It needs no Node.js.
+**Desktop app.** Download it from [GitHub Releases](https://github.com/INDXDev/jevonganize/releases):
+a `.dmg` for macOS on Apple silicon, an installer `.exe` for Windows, or an `.AppImage` for Linux.
+It needs no Node.js. `SHA256SUMS.txt` on the same page lets you check the download.
 
 Builds are not signed yet. On macOS, allow the app in System Settings > Privacy & Security after the
-first launch fails. On Windows, SmartScreen shows a warning. The desktop app is the same UI in its own
-window.
+first launch fails. On Windows, SmartScreen shows a warning. The Windows and Linux builds have not
+been tried by hand, so please report what you find. The desktop app is the same UI in its own window.
+
+**From source.** See [CONTRIBUTING.md](../CONTRIBUTING.md#set-up). Run `pnpm build`, then
+`node dist/cli.mjs`.
 
 ## What is sent before you start
 

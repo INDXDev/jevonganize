@@ -19,6 +19,8 @@ breaks, `better-sqlite3` is a close fallback.
 | `file_answer` | Which answer each file uses | A file, a facet and an answer key |
 | `review` | Items waiting for a person | A `suggest` or `restore` item for one tag on one file |
 | `plan` | Tag changes, past and proposed | One plan as JSON, and its status |
+| `plan_op` | Progress of a running apply or undo | One op already written, for one plan and one file |
+| `similarity_state` | Whether similarity weights need a rebuild | One flag row |
 | `vocabulary` | Values of open facets | One value and its state: `proposed`, `active` or `retired` |
 | `content` | Full-text search | The text sent for a file, by `rowid` = `file.id` |
 

@@ -183,7 +183,9 @@ describe('open_file', () => {
     'hands %s to the OS, as one argument and no shell',
     async (name) => {
       await callTool('open_file', { id: await add(name) }, ctx);
-      expect(vi.mocked(spawn).mock.calls[0]?.[1]).toEqual([at(name)]);
+      // `explorer` takes the path quoted, still as one argument.
+      const arg = process.platform === 'win32' ? `"${at(name)}"` : at(name);
+      expect(vi.mocked(spawn).mock.calls[0]?.[1]).toEqual([arg]);
     },
   );
 

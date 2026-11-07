@@ -35,7 +35,8 @@ The CLI, the server and the desktop app all use the same ones.
 All three end up in the same file. `set_config` changes the keys you set and keeps the others, but it
 rewrites the file, so **comments and key order are lost**. If you keep comments, edit by hand.
 
-A running server checks the file's modification time on each tool call, and reloads it.
+A running server reads the file when it starts. Changes made in Settings or with `config set` take
+effect at once. A hand edit takes effect after a restart.
 
 An API key never goes in this file. See [Validation](#validation).
 
@@ -43,11 +44,11 @@ An API key never goes in this file. See [Validation](#validation).
 
 One zod schema in `core/config.ts` validates the file, `set_config` and the settings form.
 
-- Unknown keys are errors, with a "did you mean" for a close name.
+- Unknown keys are errors.
 - Every problem is reported at once, by key path, not just the first.
 - Error messages never quote a TOML line, because that line may hold a secret.
-- An `api_key` key anywhere is refused.
-- `thresholds` must satisfy `0 <= review <= apply <= 1`.
+- An `api_key` key in any settings table is refused as an unknown key.
+- `thresholds.apply` and `thresholds.review` are each between 0 and 1.
 - `set_config` validates first, so an invalid change never reaches the file.
 - The file is written atomically and synced to disk, and it keeps its mode.
 
@@ -55,7 +56,7 @@ One zod schema in `core/config.ts` validates the file, `set_config` and the sett
 | --- | --- |
 | CLI | Stops with exit 2 and lists the problems |
 | Starting the server | Stops with exit 2 and lists the problems |
-| Running server | Keeps the last good config, and shows a warning in the UI until the file is fixed |
+| Running server | Keeps the config it started with. The problems show at the next start |
 
 An error in one custom facet file does not stop anything. That file is skipped with a warning.
 
@@ -74,6 +75,7 @@ that whole class of attack does not exist.
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `language` | `"system"` | Interface language: PC default, `"en"` (English), `"ja"` (日本語), `"zh-CN"` (简体中文) |
+| `port` | `48620` | Port for the local server, 1024 to 65535. The next free port is used if this one is taken |
 | `concurrency` | `8` | Maximum parallel model calls |
 | `max_tags` | `10` | Hard cap of tags per file on what organize adds, counting tags a person added but not `entity:` names |
 | `fiscal_year_start` | `4` | First month of the fiscal year, 1 to 12, for `fiscal-year` fields |
@@ -157,12 +159,14 @@ Prefer a pinned model id. A moving alias can leave cached answers from an older 
 
 ## `[profiles.<name>]`
 
-Optional extra models. A facet uses one by naming it in `profile`. Same keys as `[provider]`.
+Optional extra models. A facet uses one by naming it in `profile`. Same keys as `[provider]`. There
+are none by default. For example:
 
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `profiles.vision.name` | `"typesafe"` | Provider |
-| `profiles.vision.model` | `"jev-latest"` | Model id |
+```toml
+[profiles.vision]
+name = "typesafe"
+model = "jev-latest"
+```
 
 A profile is used only if a facet names it. If one does and its key is missing, the job refuses to
 start. A file that reaches a profile's facet goes to that provider too.

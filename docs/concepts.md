@@ -89,7 +89,8 @@ that record current. No file content leaves your machine.
 4. **Decide** the remaining facets, in one call per file. Cached answers are reused.
 5. **Resolve** answers against [thresholds](#confidence).
 6. **Plan** the result. Nothing has been written yet.
-7. **Apply** the plan after you have seen it. Each file's tags are read again, merged and written.
+7. **Apply** the plan. `organize` does this at once unless you pass `--no-apply`. Each file's tags
+   are read again, merged and written.
 
 A plan can be undone. See [architecture](architecture.md#the-two-flows).
 

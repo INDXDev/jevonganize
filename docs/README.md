@@ -17,6 +17,7 @@
 | Fix a problem | [Troubleshooting](troubleshooting.md) |
 | Learn the codebase layout and rules | [Architecture](architecture.md) |
 | Look up an interface between components | [Contracts](contracts.md) |
+| Cut a release | [Releasing](releasing.md) |
 
 ## Research
 

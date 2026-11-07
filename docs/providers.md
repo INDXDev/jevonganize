@@ -128,6 +128,10 @@ before it starts.
 [tag suggestions](presets.md#open-facets), so it must be a text-generating model, not a decision
 model. It can be a different provider from `[provider]`, so file state may go to both.
 
+`[ner]` is a third model. `organize` uses it to read proper names out of files that hold them, and it
+defaults to OpenAI's `gpt-5.4-mini`. With a local `[provider]`, set `[ner]` too, or that text goes to
+OpenAI.
+
 ## Setup
 
 Store keys with `set_api_key`, in the settings screen or from the [CLI](cli.md). They go in

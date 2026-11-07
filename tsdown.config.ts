@@ -10,8 +10,9 @@ export default defineConfig({
   },
   format: 'esm',
   platform: 'node',
-  // `vite build` runs first, and its output is dist/web. Hashed chunks would otherwise pile up.
-  clean: ['dist/**', '!dist/web/**'],
+  // Empties dist, so hashed chunks do not pile up. `vite build` runs after this and writes dist/web.
+  // A negated pattern to keep dist/web deleted it anyway on Windows.
+  clean: true,
   // Everything in `dependencies` stays external, including the native sharp, @napi-rs/canvas and
   // koffi. Electron is a devDependency, which would otherwise be bundled.
   deps: { neverBundle: ['electron'] },

@@ -52,14 +52,16 @@ differ by who reads the file.
    `state_hash` is computed, so caching still works. Invisible characters (`\p{Cf}`, apart from the
    zero-width joiner) are removed from extracted text before sending. See
    [pipeline.md](pipeline.md#how-the-model-state-is-assembled).
-3. **Plan approval.** High confidence only joins a plan. A person applies it.
+3. **Plans and undo.** Only confident answers join a plan. `organize` applies it unless given
+   `--no-apply`, and every change can be undone. An agent still needs a person's approval to start
+   `organize` or to apply any other plan.
 
 Together these mean that **a file can at worst mislabel itself, and only within the schema's labels.**
 It cannot invent a tag, touch another file, run anything, or reach a tool. A decision model has no
 tools.
 
 Delimiters reduce the chance of a mislabel, and do not prevent it. The guarantee comes from closed
-output and approval. Tags are advisory, so a wrong one costs little. **Do not use tags as a security
+output and undo. Tags are advisory, so a wrong one costs little. **Do not use tags as a security
 control.** A hostile file can label itself `visibility:public`.
 
 `examples/messy-downloads/` includes a file with an injection attempt, and fixtures check that the
@@ -90,8 +92,8 @@ costs listed under [Some risks remain](#some-risks-remain).
 ## What leaves your machine
 
 The `language` preference and PC language detection are local presentation settings. Detection reads
-the OS preference (a bounded `/usr/bin/defaults` call on macOS, a Windows API, or Linux locale
-variables); it makes no network request. Translations do not rewrite file data, tags or prompts, and
+the OS preference (on macOS the language preference file, with a bounded `/usr/bin/defaults` call
+only if that fails; a Windows API; or Linux locale variables); it makes no network request. Translations do not rewrite file data, tags or prompts, and
 untrusted text is never interpreted as a translation key. The existing output sanitiser still runs
 at the terminal boundary.
 
@@ -103,6 +105,8 @@ at the terminal boundary.
 | `organize` | Per file: its name but not its folder path, up to `budget.text_chars` of text, up to `budget.images` images (none with `send_images = false`), metadata, and the facet questions | `[provider]`, plus any profile a facet names |
 | `suggest`, suggestions in the UI | The same state, and your tag vocabulary | `[chat]` |
 | Verifying a suggestion | The same state again, and one yes-or-no question per candidate tag | `[provider]` |
+| `organize`, for files that name people, organisations and the like | The same text and metadata, to read the names out | `[ner]` |
+| `topics pick`, and `setup` with a key | File names in the folder, with no folder path or content, and one question per catalog topic | `[provider]` |
 | Chat panel, `ask` | Your messages, and tool output: names, paths, tags, metadata, answers. No file text | `[chat]` |
 | MCP | Tool output, as above | The client's own model. Jevonganize does not choose it |
 

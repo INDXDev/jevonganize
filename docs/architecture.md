@@ -20,8 +20,8 @@ are checked by TypeScript; user data is only interpolated, never translated by m
    HTTP API, the chat panel and the MCP server all call that entry.
 3. **One server, three shells.** The CLI, the browser and the desktop app use the same server and
    the same UI. The desktop app adds a window and nothing else.
-4. **Preview, then apply.** Every bulk change is a stored plan. A person sees it before it runs, and
-   it can be undone.
+4. **Plan, then apply.** Every bulk change is a stored plan, and it can be undone. `organize`
+   applies its own plan unless told not to. Other plans wait for a person.
 5. **Closed output.** A model only picks from labels the schema defines, so a tag can never contain
    text a model made up. Open vocabularies pass through a person first.
 6. **Files are hostile.** Names, contents and metadata are untrusted input. See
@@ -72,10 +72,12 @@ are checked by TypeScript; user data is only interpolated, never translated by m
 3. **Derive** facets that need no model, from metadata.
 4. **Decide** the remaining facets. Cached answers are reused, and everything missing goes in one
    call per file.
-5. **Resolve** raw answers against thresholds. High confidence joins the plan, the middle band goes
-   to the review queue, and the rest is dropped.
+5. **Resolve** raw answers against thresholds. Confident answers join the plan, estimated answers go
+   to the review queue, and the rest is dropped. By default `apply` and `review` are both 0.5, so
+   there is no middle band. Raise `thresholds.apply` to get one.
 6. **Plan** the result. Nothing has been written yet.
-7. **Apply** the plan: re-read each file's tags, merge, write, update the mirror.
+7. **Apply** the plan, unless `--no-apply` was given: re-read each file's tags, merge, write, update
+   the mirror.
 
 Steps 1 to 6 run again for free when thresholds change, because raw answers are cached and
 resolution runs after the cache.
@@ -93,9 +95,12 @@ jevonganize/
 │   ├── commands/         One file per command group: parse flags, print
 │   ├── core/
 │   │   ├── config.ts     Paths, zod schema, TOML load and save, UserError
+│   │   ├── paths.ts      Where config, data and caches live
+│   │   ├── system-language.ts The PC's language
 │   │   ├── credentials.ts  API keys in a 0600 file
 │   │   ├── sanitize.ts   Safe printing of untrusted text
 │   │   ├── tags.ts       readTags, writeTags, supported: the OS boundary
+│   │   ├── tag-reader.ts Batched tag reads for a scan, in tag-worker.ts
 │   │   ├── db.ts         openDb: the one handle to the index
 │   │   ├── db/           All SQL, including similarity, one file per concern
 │   │   ├── scan.ts       Walk, fingerprint, mirror tags
@@ -105,6 +110,7 @@ jevonganize/
 │   │   ├── facets.ts     Load presets, map facets to questions
 │   │   ├── facet-answers.ts Check, derive and resolve answers
 │   │   ├── organize.ts   The organize flow
+│   │   ├── names.ts      Proper names, read during organize
 │   │   ├── content-hash.ts A file's content hash
 │   │   ├── estimate.ts   What an organize run would cost
 │   │   ├── plans.ts      Propose, apply, undo
@@ -113,6 +119,8 @@ jevonganize/
 │   │   └── tools/        Its rows by concern, jobs and watching
 │   ├── extract/
 │   │   ├── index.ts      Runs the pipeline for a file, in a worker pool
+│   │   ├── scheduler.ts  Its queue, with thumbnails first
+│   │   ├── cache.ts      Recent extraction results, in memory
 │   │   ├── extractors.ts Sniffing and the extractor table
 │   │   ├── source.ts     What extractors share: signature, state writes, ranged reads
 │   │   ├── pdf.ts        PDF text, metadata and page renders
@@ -129,6 +137,7 @@ jevonganize/
 │   │   ├── openrouter.ts Decision adapter for OpenRouter
 │   │   ├── decide.ts     decide(): cache, limits, refusals
 │   │   ├── suggest.ts    Open tag suggestions
+│   │   ├── pick.ts       Topics chosen from the catalog
 │   │   ├── chat.ts       Chat panel and `ask`
 │   │   └── pricing.ts    Cost estimates
 │   ├── server/
@@ -138,6 +147,7 @@ jevonganize/
 │   ├── desktop/main.ts   The Electron shell
 │   └── web/              The React UI, see ui.md
 ├── presets/              11 packs of facets, as TOML, and the topic catalog
+├── scripts/              Release checks, third-party notices, the topic catalog builder
 ├── test/                 <module>.test.ts, plus test/fixtures/
 ├── docs/
 ├── examples/messy-downloads/   A deliberately messy folder for demos
@@ -152,9 +162,9 @@ Dependencies point downward only. `.oxlintrc.json` enforces this, so a violation
 | --- | --- | --- |
 | Interface | `cli.ts`, `commands/`, `mcp.ts`, `server/`, `desktop/`, `web/` | The tool table, types, `config.ts`, `credentials.ts`, `ai/chat.ts`. `web/` uses types only |
 | Tools | `core/tools.ts`, `core/tools/` | Everything below |
-| Flows | `core/organize.ts`, `core/estimate.ts`, `core/plans.ts`, `core/plan-conflicts.ts`, `core/scan.ts`, `core/fingerprint.ts`, `core/exclusions.ts`, `core/content-hash.ts`, `core/watch.ts` | Everything below |
+| Flows | `core/organize.ts`, `core/estimate.ts`, `core/plans.ts`, `core/plan-conflicts.ts`, `core/scan.ts`, `core/fingerprint.ts`, `core/exclusions.ts`, `core/content-hash.ts`, `core/watch.ts`, `core/names.ts` | Everything below |
 | Engines | `extract/`, `ai/`, `core/facets.ts`, `core/facet-answers.ts` | Infrastructure, types |
-| Infrastructure | `core/config.ts`, `core/credentials.ts`, `core/db.ts`, `core/db/`, `core/tags.ts`, `core/sanitize.ts` | Types |
+| Infrastructure | `core/config.ts`, `core/paths.ts`, `core/system-language.ts`, `core/credentials.ts`, `core/db.ts`, `core/db/`, `core/tags.ts`, `core/tag-reader.ts`, `core/tag-worker.ts`, `core/sanitize.ts` | Types |
 | Contracts | `types.ts` | Nothing |
 
 Rules that keep this honest:

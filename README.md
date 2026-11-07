@@ -24,23 +24,18 @@ the operating system stores on the file. You see every change as a plan first, a
 
 It writes tags only. It never moves, renames, edits or deletes a file.
 
-**Status: early.** Version 0.1.0 is not released, and the package is not on npm yet. The test suite
-passes in CI on macOS, Ubuntu and Windows Server, with real tag writes on each. That proves test
-behaviour only: Explorer, Dolphin and packaged Linux and Windows apps have not been tried.
+**Status: early.** 0.1.0 is the first release. The test suite passes in CI on macOS, Ubuntu and
+Windows Server, with real tag writes on each. That proves test behaviour only: Explorer, Dolphin and
+packaged Linux and Windows apps have not been tried.
 
 <!-- Screenshots: docs/assets/screenshots/browser.png and friends go here once they exist. -->
 
 ## Try it
 
-Until the first release, build from source. You need Node.js 24.22.1 or later (or 26.12.1 on that
-line) and pnpm 12.
+You need Node.js 24.22.1 or later on the 24 line, or 26.12.1 or later.
 
 ```sh
-git clone https://github.com/INDXDev/jevonganize.git
-cd jevonganize
-pnpm install
-pnpm build
-node dist/cli.mjs
+npx jevonganize
 ```
 
 This starts a local server and opens your browser. Scanning and browsing need no API key and send
@@ -50,10 +45,14 @@ will cost before anything leaves your machine.
 Want a safe first target? Point it at [`examples/messy-downloads`](examples/messy-downloads/), a
 small folder of fictional files.
 
-After the first release, this will be:
+To build from source instead, you also need pnpm 12:
 
 ```sh
-npx jevonganize   # not published yet
+git clone https://github.com/INDXDev/jevonganize.git
+cd jevonganize
+pnpm install
+pnpm build
+node dist/cli.mjs
 ```
 
 ## How it works
@@ -94,11 +93,11 @@ estimate a probability, so their answers go to review. See [Providers](docs/prov
 One server and one UI, three ways in. Every operation is one entry in a tool table, so they behave the
 same.
 
-| Shell   | Start it                                             | Notes                                                                                                |
-| ------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Browser | `jevonganize`                                        | A local server on `127.0.0.1`, guarded by host, origin and token checks                              |
-| Desktop | Download from GitHub Releases, once a release exists | The same UI in its own window. No Node.js needed. Builds are unsigned, so macOS and Windows warn you |
-| CLI     | `jevonganize scan`, `organize`, `apply`, `search`    | `--json` on every command. See the [CLI reference](docs/cli.md)                                      |
+| Shell   | Start it                                                                         | Notes                                                                                                                                                                                                        |
+| ------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Browser | `jevonganize`                                                                    | A local server on `127.0.0.1`, guarded by host, origin and token checks                                                                                                                                      |
+| Desktop | Download from [GitHub Releases](https://github.com/INDXDev/jevonganize/releases) | The same UI in its own window, for macOS (Apple silicon), Windows and Linux. No Node.js needed. Builds are unsigned, so macOS and Windows warn you. The Windows and Linux builds have not been tried by hand |
+| CLI     | `jevonganize scan`, `organize`, `apply`, `search`                                | `--json` on every command. See the [CLI reference](docs/cli.md)                                                                                                                                              |
 
 Coding agents get a fourth door: `jevonganize mcp` serves the same tools over stdio. Applying a plan
 needs a person's approval. See [LLM-native use](docs/llm-native.md).
@@ -109,9 +108,8 @@ The same flow in a terminal:
 jevonganize auth set openai
 jevonganize scan ~/Downloads               # free and local
 jevonganize organize ~/Downloads --dry-run # shows the cost, sends nothing
-jevonganize organize ~/Downloads           # sends file data, writes no tags
-jevonganize apply <plan id>                # now tags are written
-jevonganize undo <plan id>
+jevonganize organize ~/Downloads           # sends file data, then writes tags
+jevonganize undo <plan id>                 # takes them off again
 ```
 
 ## Presets
@@ -219,7 +217,7 @@ Files are treated as hostile: names, contents and metadata. See [Security](docs/
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Reports from Linux and Windows are especially useful, since
-nothing has run there yet. To report a vulnerability, see [SECURITY.md](SECURITY.md).
+only CI has run there. To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 

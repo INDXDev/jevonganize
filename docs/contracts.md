@@ -88,8 +88,8 @@ Every tool has a place in the UI, which `test/tools.test.ts` checks. See
 `agent: false` is a security boundary. A model must never reach keys or config, or add folders.
 `apply_plan` takes only an id, so what a person saw is exactly what runs. Tools that start a job
 return it at once. `Job.failed`, `Job.warnings` and `Job.scan` carry what a finished job found, so
-front ends need no second call. `organize` and
-`suggest_tags` need approval because they spend money and send content to a provider, and a
+front ends need no second call. `organize`, `suggest_tags` and `pick_topics` need approval because
+they spend money and send file data or file names to a provider, and a
 hostile file name could steer a model into calling them. `resolve_reviews` and `discard_plan` need
 it because they drop what only a person should drop: a `restore` item is the one record of a lost
 tag. The CLI and the UI are people, so they are not gated.
@@ -361,6 +361,10 @@ model = "gpt-6-luna"
 [chat]                           # chat panel and tag suggestions
 name = "openai"
 model = "gpt-6-luna"
+
+[ner]                            # reads proper names out of files
+name = "openai"
+model = "gpt-5.4-mini"
 
 [facets]
 enabled = ["core", "time", "sensitivity", "media"]   # packs, or single facet ids

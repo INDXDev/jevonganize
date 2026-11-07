@@ -12,6 +12,10 @@
     "tags",
     "xattr"
   ],
+  "homepage": "https://github.com/INDXDev/jevonganize#readme",
+  "bugs": {
+    "url": "https://github.com/INDXDev/jevonganize/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,10 +31,14 @@
   ],
   "type": "module",
   "main": "dist/desktop/main.mjs",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "dev": "node src/cli.ts",
     "dev:web": "vite",
-    "build": "vite build && tsdown",
+    "build": "tsdown && vite build",
     "dist": "pnpm build && electron-builder",
     "lint": "oxlint --deny-warnings",
     "format": "oxfmt",

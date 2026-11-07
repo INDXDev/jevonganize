@@ -6,6 +6,11 @@ This project follows [Semantic Versioning](https://semver.org).
 
 First version, not released yet.
 
+- Releases go to npm and to one GitHub Release, which holds the macOS, Windows and Linux builds, the
+  npm tarball and `SHA256SUMS.txt`. Its notes come from this file. See `docs/releasing.md`.
+- `pnpm build` on Windows no longer deletes the web UI it has just built, so the Windows app and a
+  package built there have a UI.
+
 - Excel and PowerPoint files preview as a drawn page again, not as raw bytes.
 - A double click, or the Open button in the inspector, opens a file in its default app. Executables,
   scripts, links and files with no extension are refused, and Reveal shows them instead.

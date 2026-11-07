@@ -239,7 +239,8 @@ describe('the UI', () => {
 
   test('webRoot looks in dist/web from source', () => {
     const web = webRoot();
-    expect(web === undefined || web.endsWith('dist/web/')).toBe(true);
+    // A Windows path uses backslashes. This only passed there because the build used to lose dist/web.
+    expect(web === undefined || web.replaceAll('\\', '/').endsWith('dist/web/')).toBe(true);
   });
 });
 

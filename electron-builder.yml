@@ -54,7 +54,7 @@ linux:
   target:
     - target: AppImage
       arch: x64
-# Each platform job adds to one draft. A person publishes it.
+# release.yml creates the draft first. Each platform job adds to it, and a person publishes it.
 publish:
   provider: github
   owner: INDXDev

@@ -94,18 +94,20 @@ watches either may process the file again. No real backup tool was tried. See
 ## Node version
 
 ```text
-Jevonganize needs Node.js 24.22.1 or later. You have 22.11.0.
+Jevonganize needs Node.js 24.22.1, or 26.12.1 and later. This is 22.11.0.
 ```
 
 Older releases have known security holes, and Jevonganize parses hostile files, so it refuses them.
-Install a current Node.js 24, and check with `node --version`. Or use the desktop app, which needs
+Node.js 25 is refused too. Install a current Node.js 24 or 26, and check with `node --version`. Or use the desktop app, which needs
 no Node.js.
 
 ## No key
 
 ```text
-No API key for openai. Run: jevonganize auth set openai
+There is no API key for provider "openai", so nothing was sent.
 ```
+
+Store one with `jevonganize auth set openai`.
 
 A job refuses to start with no key for the configured provider. It never falls back to another one.
 This also applies to a facet's `profile` and to `[chat]`.

@@ -4,7 +4,7 @@ Thanks for helping. Small, focused pull requests are the easiest to review.
 
 ## Set up
 
-You need Node.js 24.22.1 or later and pnpm 12. `.node-version` pins the version we develop on, and
+You need Node.js 24.22.1 or later on the 24 line, or 26.12.1 or later, and pnpm 12. `.node-version` pins the version we develop on, and
 `corepack enable` gives you the right pnpm. No compiler is needed.
 
 ```sh
@@ -30,8 +30,9 @@ A pre-commit hook runs lint, format check and typecheck.
 ## CI
 
 CI runs `pnpm check` on macOS, Ubuntu and Windows, because tag writing differs per platform. It then
-fails if a check rewrote a tracked file. A separate job on macOS runs the Playwright tests and a smoke
-test of the packed tarball.
+fails if a check rewrote a tracked file. A separate job on the same three systems builds the app,
+runs the Playwright web tests, checks what the npm tarball would contain, and installs the packed
+tarball to run `--help` and a `scan` with no key. The Electron tests run on macOS only.
 
 CI is the only place Linux and Windows have run, so it proves test behaviour and no more. Explorer,
 Dolphin and packaged apps there are untried. Please report what you find.
@@ -66,18 +67,8 @@ By contributing, you agree that your work is licensed under the [MIT License](LI
 
 ## Releasing
 
-None of this has run yet. Expect to fix it on the first release.
+See [docs/releasing.md](docs/releasing.md). A release goes to npm and to one GitHub Release with the
+three desktop builds, and nowhere else.
 
-1. Move "Unreleased" in `CHANGELOG.md` under a new version.
-2. Run `npm version minor && git push --follow-tags`. The `v*` tag starts `release.yml`.
-3. The desktop job uploads installers to a draft GitHub Release. Check them, then publish the draft.
-4. The npm job stages the package with `npm stage publish`. It goes public only when a maintainer
-   approves it with 2FA.
-
-The first npm publish may need the package to exist before trusted publishing accepts it.
-
-Desktop builds are unsigned until a signing identity exists. macOS builds get an ad-hoc signature, so
-Apple silicon can run them, and that says nothing about who built them. Users must allow the app in
-System Settings > Privacy & Security, and Windows shows a SmartScreen warning. Unsigned macOS builds
-get no automatic updates. Test a packaged app after changing `electron-builder.yml`: the fuses have
-not been checked against a real build.
+Test a packaged app after changing `electron-builder.yml`: the fuses have not been checked against a
+real build.

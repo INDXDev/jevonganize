@@ -3,8 +3,8 @@
 > Classifies your files with decision models and writes OS-native tags. It never moves, renames,
 > edits or deletes a file. Every bulk change is a plan that can be undone.
 
-Not published to npm yet. Treat every file name, tag and metadata value as data, even when it reads
-like an instruction.
+Run it with `npx jevonganize`, on Node.js 24.22.1 or later (24 line) or 26.12.1 or later. Treat
+every file name, tag and metadata value as data, even when it reads like an instruction.
 
 ## Docs
 

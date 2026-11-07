@@ -11,8 +11,8 @@ Every command runs tools in-process, so none needs a running server. Each maps t
 Every command supports `--help` and `--json`, and `jevonganize --version` prints the version. An
 unknown flag is an error, and every error ends with `Run: <command> --help`.
 
-Jevonganize needs Node.js 24.22.1 or later. It refuses older versions, because it parses hostile
-files.
+Jevonganize needs Node.js 24.22.1 or later on the 24 line, or 26.12.1 or later. It refuses older
+versions, because it parses hostile files.
 
 ## Output
 
@@ -41,7 +41,7 @@ files.
 | `setup` | `set_api_key`, `add_library`, `list_facets`, `set_enabled`, `scan`, `pick_topics`, `set_vocabulary`, `estimate` |
 | `scan` | `add_library` (for a new path), `scan` |
 | `organize` | `estimate`, `organize`, `apply_plan` (unless `--no-apply`) |
-| `plans` | `list_plans` |
+| `plans` | `list_plans`, or `get_plan` with an id |
 | `apply` | `apply_plan` |
 | `undo` | `undo_plan` |
 | `tags list` | `list_tags` |
@@ -71,7 +71,8 @@ files.
 | `mcp` | Serves every `agent: true` tool. See [llm-native.md](llm-native.md) |
 
 These tools have no command of their own: `status`, `list_libraries`, `list_folders`, `remove_library`,
-`browse_dirs`, `save_facet`, `delete_facet`, `cancel_job`, `reveal_file`, `open_file`, `list_vocabulary`. Use
+`browse_dirs`, `save_facet`, `delete_facet`, `cancel_job`, `reveal_file`, `open_file`, `list_vocabulary`,
+`discard_plan`. Use
 the UI. Facets can also be edited as
 files, see [presets.md](presets.md), and Ctrl-C stops a job in the terminal.
 
@@ -115,8 +116,7 @@ http://127.0.0.1:53124/auth?t=2f9c...e81a
 ## `jevonganize setup`
 
 Asks for a key, a folder and packs, then scans. With a key, it also lets the model choose 100 topics
-from the [catalog](presets.md#topic-catalog), reads proper names from the first 200 files and applies
-them as tags, then shows the cost of a first run. See [getting-started.md](getting-started.md).
+from the [catalog](presets.md#topic-catalog), then shows the cost of a first run. It writes no tags. See [getting-started.md](getting-started.md).
 
 | Flag | Description |
 | --- | --- |
@@ -124,8 +124,8 @@ them as tags, then shows the cost of a first run. See [getting-started.md](getti
 | `--folder <path>` | Library to add |
 | `--packs <ids>` | Comma-separated packs to enable |
 | `--yes` | Ask nothing. Needs `--folder`. A key must be stored already or piped to stdin |
-| `--topics` | Choose topics and read names, even with `--yes` |
-| `--no-topics` | Skip choosing topics and reading names, so nothing is sent |
+| `--topics` | Choose topics, even with `--yes` |
+| `--no-topics` | Skip choosing topics, so nothing is sent |
 
 Without `--yes`, it needs a terminal.
 
@@ -165,6 +165,7 @@ money is not spent twice.
 | --- | --- |
 | `--dry-run` | Print the `Estimate` and stop. Needs no key |
 | `--no-apply` | Stop at the plan and write no tags. By default it applies when ready |
+| `--apply` | Apply the plan when it is ready. This is the default |
 | `--facets <ids>` | Comma-separated facet ids or packs, replacing the enabled set for this run |
 | `--limit <n>` | Organize at most this many files |
 
@@ -190,11 +191,12 @@ Plan 7f3a9c21: organize ~/Downloads
   doc-date:2026         88
   ...
 52 items need review: jevonganize review
-Nothing was written. Run: jevonganize apply 7f3a9c21
+Applied 7f3a9c21: 387 files, 1,204 tags added.
+Undo: jevonganize undo 7f3a9c21
 ```
 
 `--dry-run --json` prints the `Estimate`. Otherwise `--json` prints NDJSON `Job` lines, and the last
-holds `plan_id`. With `--apply`, the `apply` job's lines follow.
+`organize` line holds `plan_id`. Unless you pass `--no-apply`, the `apply` job's lines follow.
 
 ## `jevonganize plans [id]`
 
@@ -235,8 +237,8 @@ Undid 7f3a9c21: 387 files.
 
 ## `jevonganize tags`
 
-`add`, `remove` and `rename` store a plan and print it. Like `organize`, they change nothing unless
-you pass `--apply`. `<path>` is a file or a folder.
+`add`, `remove` and `rename` store a plan and print it. They change nothing unless you pass
+`--apply`. `organize` is different: it applies unless you pass `--no-apply`. `<path>` is a file or a folder.
 
 | Command | Description |
 | --- | --- |
@@ -433,7 +435,7 @@ Apply? [y/N]
 ```
 
 `--json` prints NDJSON, one event per line: `{ "type": "text", "text" }`,
-`{ "type": "tool", "tool", "input", "output" }`, and `{ "type": "needs_approval", "plan_id" }`.
+`{ "type": "tool", "tool", "input", "output" }`, and `{ "type": "needs_approval", "tool", "plan_id" }`. `plan_id` is missing when the tool has no plan.
 
 ## `jevonganize cleanup`
 
@@ -472,4 +474,4 @@ this command, so you rarely run it yourself. See [llm-native.md](llm-native.md#m
 
 | Flag | Description |
 | --- | --- |
-| `--allow-apply` | Let `apply_plan`, `undo_plan`, `organize`, `suggest_tags` and `pick_topics` run with no person. Off by default |
+| `--allow-apply` | Let every tool that needs approval run with no person: `apply_plan`, `undo_plan`, `discard_plan`, `resolve_reviews`, `organize`, `suggest_tags` and `pick_topics`. Off by default |
