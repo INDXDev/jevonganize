@@ -192,10 +192,21 @@ const run = (answers: Answer[], existing: string[] = [], rejected: string[] = []
   resolve(answers, facets, config, { existing, rejected });
 
 describe('resolve thresholds', () => {
+  test('by default nothing at or above 0.5 waits for a person', () => {
+    expect(run([answer('kind', 'a', 0.5)])).toEqual({ apply: ['kind:a'], review: [] });
+  });
+
+  test('a raised thresholds.apply brings back the review band', () => {
+    const banded = { ...config, thresholds: { ...config.thresholds, apply: 0.85 } };
+    const at = (p: number) =>
+      resolve([answer('kind', 'a', p)], facets, banded, { existing: [], rejected: [] });
+    expect(at(0.85).apply).toEqual(['kind:a']);
+    expect(at(0.84).review).toEqual([{ tag: 'kind:a', confidence: 0.84 }]);
+    expect(at(0.5).review).toHaveLength(1);
+  });
+
   test('walks the threshold table', () => {
     expect(run([answer('kind', 'a', 0.85)]).apply).toEqual(['kind:a']);
-    expect(run([answer('kind', 'a', 0.84)]).review).toEqual([{ tag: 'kind:a', confidence: 0.84 }]);
-    expect(run([answer('kind', 'a', 0.5)]).review).toHaveLength(1);
     expect(run([answer('kind', 'a', 0.49)])).toEqual({ apply: [], review: [] });
     expect(run([answer('kind', 'a', null)]).review).toEqual([{ tag: 'kind:a', confidence: null }]);
     expect(run([answer('kind', null, 0.99)])).toEqual({ apply: [], review: [] });

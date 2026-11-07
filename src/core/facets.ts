@@ -7,7 +7,7 @@
  * shaped `facet:value`, or `flag:facet`. An open facet may gain values through its vocabulary.
  */
 import { createHash } from 'node:crypto';
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -20,7 +20,14 @@ import {
   parseWith,
   paths,
   readRegularFile,
+  UserError,
 } from './config.ts';
+
+/**
+ * A proper name is not a judgement about a file but a fact in it, so it sits outside `max_tags`,
+ * or a full file would have no room for one, and a run never replaces it.
+ */
+export const isName = (tag: Tag) => tag.startsWith('entity:');
 
 /** A question as plain data. Its shape matches the SDK's, so `core/` need not import it. */
 export type Question =
@@ -197,6 +204,15 @@ export async function loadFacets(
   const facets = await readFacetDir(presets ?? [], warn);
   for (const [key, facet] of await readFacetDir(custom, warn)) facets.set(key, facet);
   return [...facets.values()];
+}
+
+/** Every value of the topic catalog, such as `finance/budgeting`. */
+export async function loadCatalog(): Promise<string[]> {
+  for (const dir of PRESET_DIRS) {
+    const text = await ifExists(readFile(join(dir, 'catalog.txt'), 'utf8'));
+    if (text) return text.split('\n').filter(Boolean);
+  }
+  throw new UserError('The topic catalog is missing.');
 }
 
 /** True when `[facets]` turns this facet on. `disabled` wins. */

@@ -10,7 +10,8 @@ import { extractFile, isFailed } from '../../extract/index.ts';
 import type { CleanupReport, Facet, Plan, ReviewItem, Tag, TagCount } from '../../types.ts';
 import { type Config, UserError } from '../config.ts';
 import type { Db } from '../db.ts';
-import { loadFacets, tagFacet } from '../facets.ts';
+import { fitTag, loadFacets, slug, tagFacet } from '../facets.ts';
+import { refusedSuggestions } from '../names.ts';
 import { proposeReviews } from '../plans.ts';
 import {
   type Context,
@@ -119,15 +120,6 @@ async function acceptReviews(ctx: Context, items: ReviewItem[]): Promise<Plan> {
   });
 }
 
-/** Tags the chat model must not suggest for a file. */
-function refusedSuggestions(db: Db, id: number): string[] {
-  const retired = db
-    .listVocabulary()
-    .filter((entry) => entry.state === 'retired')
-    .map((entry) => `${entry.facet}:${entry.value}`);
-  return [...retired, ...db.rejectedTags(id)];
-}
-
 /** Asks the chat model for tags for one file. Models are built first, so a missing key refuses. */
 async function askForTags({ db, config }: Context, id: number, path: string): Promise<Tag[]> {
   const chat = await resolveChatModel(config);
@@ -216,7 +208,9 @@ export const reviewTools = {
     run: async ({ facet, value, state }, { db, config }) => {
       const isOpen = (await openFacetsOf(config)).some((entry) => entry.id === facet);
       if (!isOpen) throw new UserError(`${facet} is not an open facet`);
-      db.setVocabulary(facet, value, state);
+      const clean = fitTag(value.split('/').map(slug).filter(Boolean).join('/'));
+      if (!clean) throw new UserError(`"${value}" has nothing a tag can hold`);
+      db.setVocabulary(facet, clean, state);
     },
   },
 

@@ -141,7 +141,7 @@ const thresholdsSchema = z.strictObject({
     .number()
     .min(0)
     .max(1)
-    .default(0.85)
+    .default(0.5)
     .describe('Confidence at or above this joins the plan'),
   review: z
     .number()
@@ -229,6 +229,9 @@ export const configSchema = z.strictObject({
   provider: providerSchema.default({ name: 'openai', model: 'gpt-6-luna' }),
   profiles: z.record(z.string(), providerSchema).default({}),
   chat: providerSchema.default({ name: 'openai', model: 'gpt-6-luna' }),
+  ner: providerSchema
+    .default({ name: 'openai', model: 'gpt-5.4-mini' })
+    .describe('The light text model that reads proper names out of files'),
   facets: facetsSchema.prefault({}),
   thresholds: thresholdsSchema.prefault({}),
   budget: budgetSchema.prefault({}),

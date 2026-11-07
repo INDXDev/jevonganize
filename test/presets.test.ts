@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { configSchema } from '../src/core/config.ts';
-import { isEnabled, loadFacets, toQuestions } from '../src/core/facets.ts';
+import { isEnabled, loadCatalog, loadFacets, toQuestions } from '../src/core/facets.ts';
 import { useTempHome } from './helpers.ts';
 
 useTempHome();
@@ -24,11 +24,12 @@ async function load() {
   return { facets, warnings };
 }
 
-test('all 100 presets load, 10 per pack, with unique ids', async () => {
+test('all 102 presets load, 10 per pack and 2 in names, with unique ids', async () => {
   const { facets, warnings } = await load();
   expect(warnings).toEqual([]);
-  expect(facets).toHaveLength(100);
-  expect(new Set(facets.map((facet) => facet.id)).size).toBe(100);
+  expect(facets).toHaveLength(102);
+  expect(new Set(facets.map((facet) => facet.id)).size).toBe(102);
+  expect(facets.filter((facet) => facet.pack === 'names')).toHaveLength(2);
   for (const pack of PACKS) {
     expect(facets.filter((facet) => facet.pack === pack)).toHaveLength(10);
   }
@@ -57,16 +58,16 @@ test('every level defines each of its steps in the instructions', async () => {
   }
 });
 
-test('only topic, party and project are open, and only topic has seeds', async () => {
+test('only topic, party, project and entity are open, and only topic has seeds', async () => {
   const open = (await load()).facets.filter((facet) => facet.open);
-  expect(open.map((facet) => facet.id).toSorted()).toEqual(['party', 'project', 'topic']);
+  expect(open.map((facet) => facet.id).toSorted()).toEqual(['entity', 'party', 'project', 'topic']);
   expect(open.filter((facet) => Object.keys(facet.values ?? {}).length > 0)).toHaveLength(1);
 });
 
-test('all of sensitivity is biased to review, and nothing claims a file is safe', async () => {
+test('all of sensitivity weighs little, and nothing claims a file is safe', async () => {
   const { facets } = await load();
   for (const facet of facets.filter(({ pack }) => pack === 'sensitivity')) {
-    expect(facet).toMatchObject({ weight: 0.25, apply_above: 0.95 });
+    expect(facet).toMatchObject({ weight: 0.25 });
   }
   const labels = facets.flatMap((f) => [...Object.keys(f.values ?? {}), ...(f.levels ?? [])]);
   expect(labels.filter((label) => /safe/.test(label))).toEqual([]);
@@ -98,4 +99,14 @@ test('the requested metadata and sensitivity facets exist with the documented ki
   }
   expect(kind.get('confidentiality')).toBe('level');
   expect(kind.get('audience')).toBe('choice');
+});
+
+test('every catalog value is a label a tag can hold', async () => {
+  const values = await loadCatalog();
+  expect(values.length).toBeGreaterThanOrEqual(10_000);
+  expect(new Set(values).size).toBe(values.length);
+  for (const value of values) {
+    expect(value).toMatch(/^[a-z-]+\/[a-z0-9-]+$/);
+    expect(`topic:${value}`.length).toBeLessThanOrEqual(64);
+  }
 });

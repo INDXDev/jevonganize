@@ -62,9 +62,9 @@ npx jevonganize   # not published yet
 2. **Extract.** It reads text, images and metadata on your machine, in isolated workers.
 3. **Decide.** One model call per file answers every enabled question. Answers are cached, so a file
    is not paid for twice.
-4. **Plan.** High-confidence tags join a plan, and the middle band goes to a review queue. Nothing has
+4. **Plan.** Tags at 0.5 confidence or above join a plan. Nothing has
    been written yet.
-5. **Apply.** You approve the plan, and the tags are merged onto the files. A plan can be undone.
+5. **Apply.** The tags are merged onto the files, with nothing to approve. A plan can be undone.
 
 The tags on disk are the truth. The database is only an index. Delete it, or delete Jevonganize, and
 your tags stay on your files. Jevonganize never removes a tag you set yourself unless you ask it to.
@@ -175,17 +175,19 @@ Some apps drop tags when they save, and some volumes cannot store them. See [Tag
 There is no telemetry, no account and no Jevonganize server. Your files reach only the provider you
 chose, and there is no silent fallback to another one.
 
-| Action                                               | What leaves your machine                                                                                                 | To                 |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------ |
-| Scan, watch, search, review, similar files, browsing | Nothing                                                                                                                  |                    |
-| `organize --dry-run`, cost estimates                 | Nothing                                                                                                                  |                    |
-| Apply, undo, tag changes                             | Nothing                                                                                                                  |                    |
-| Interface language and PC language detection         | Nothing                                                                                                                  |                    |
-| Short-lived extraction and hash caches               | Nothing; bounded process memory only                                                                                     |                    |
-| Organize                                             | Per file: its name but not its folder, up to 8,000 characters of text, up to 2 small images, metadata, and the questions | Your provider      |
-| Tag suggestions                                      | The same, plus your tag vocabulary                                                                                       | Your chat provider |
-| Verifying a suggestion                               | The same state again, and one yes-or-no question per candidate tag                                                       | Your provider      |
-| Chat panel, `ask`                                    | Your messages, and names, paths, tags and metadata from tool calls. No file text                                         | Your chat provider |
+| Action                                                           | What leaves your machine                                                                                                 | To                                        |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Scan, watch, search, review, similar files, browsing             | Nothing                                                                                                                  |                                           |
+| `organize --dry-run`, cost estimates                             | Nothing                                                                                                                  |                                           |
+| Apply, undo, tag changes                                         | Nothing                                                                                                                  |                                           |
+| Interface language and PC language detection                     | Nothing                                                                                                                  |                                           |
+| Short-lived extraction and hash caches                           | Nothing; bounded process memory only                                                                                     |                                           |
+| Organize                                                         | Per file: its name but not its folder, up to 8,000 characters of text, up to 2 small images, metadata, and the questions | Your provider                             |
+| Tag suggestions                                                  | The same, plus your tag vocabulary                                                                                       | Your chat provider                        |
+| Verifying a suggestion                                           | The same state again, and one yes-or-no question per candidate tag                                                       | Your provider                             |
+| `topics pick`, and `setup` when a key is present                 | File names in the folder, with no folder path or content, and one question per catalog topic                             | Your provider                             |
+| Organize, for files that name people, organisations and the like | The same text, to read the names out                                                                                     | Your provider, then your `[ner]` provider |
+| Chat panel, `ask`                                                | Your messages, and names, paths, tags and metadata from tool calls. No file text                                         | Your chat provider                        |
 
 **A password inside an ordinary text file is sent like any other text.** Contents are not scanned for
 secrets. Names such as `.env`, `*.pem` and SSH keys are [never read](docs/security.md#built-in-secret-exclusions).

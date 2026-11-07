@@ -22,7 +22,7 @@ The goals, in order:
 | | A library that is a link to a secret folder | `add_library` resolves the real path, refuses it if excluded, and stores that path, so exclusions judge where the link leads. A scan re-checks a stored root |
 | | A FIFO or device that hangs the scan | Only regular files are opened |
 | File contents | Parser exploit, zip bomb, huge file | `extract/` runs in workers, with `budget.max_parse_mb` and `budget.timeout_seconds`. A hung parser is terminated, and a parser error fails one file. A crash in native code, such as `sharp`, is not contained: it ends the server process, and the next start resumes. Archives are listed and never unpacked |
-| | Macros, scripts | Never run. Nothing opens a file with its default app. The UI offers Reveal, not Open |
+| | Macros, scripts | Never run by the app. Only a person's click opens a file in its default app, and [never an executable](#opening-a-file) |
 | | Prompt injection | See [Prompt injection](#prompt-injection) |
 | | Active content in a preview | See [Serving originals](#serving-originals) |
 | Metadata | EXIF, PDF title, hidden PDF text | Treated exactly like file contents |
@@ -71,9 +71,15 @@ The closed-output limit does not apply here, and this section says what does.
 
 - **Suggestions.** `suggest_tags` returns free text from a model. It only ever becomes a review item,
   and a person accepts or rejects it. Tag rules still apply.
+- **Proper names.** Reading names in `organize` is the one place model text becomes a tag with no person
+  accepting it. The owner chose this, because a tag changes no file. Code still bounds it: the kind
+  is a closed list, the name must appear literally in the file's text or metadata, it is reduced to the
+  tag grammar, at most 8 per file, a tag a person removed stays removed, and it
+  all goes through a plan that `undo` reverses. So **a hostile file can tag itself with any name it
+  contains**, and nothing more. Models still need approval to call `organize`, because it spends money.
 - **Chat.** A chat model writes free text, and it reads file names, metadata and tags through tools. So
   a hostile name can steer it. It cannot apply anything or spend money, because `apply_plan`,
-  `undo_plan`, `organize` and `suggest_tags` need approval. It cannot delete a `restore` item or a
+  `undo_plan`, `organize`, `suggest_tags` and `pick_topics` need approval. It cannot delete a `restore` item or a
   proposed plan, because `resolve_reviews` and `discard_plan` need approval too. It cannot reach keys
   or config, because those tools have `agent: false`. And `apply_plan` takes only an id, so a plan
   cannot change after you see it.
@@ -217,6 +223,23 @@ In the UI, per [File previews](ui.md#file-previews):
 - Word output goes in the same frame.
 - `pdfjs-dist` must stay on a current version. The page's CSP has no `unsafe-eval`.
 
+## Opening a file
+
+`open_file` hands a file to the OS, as a double click in the file manager would. It is the only thing
+that opens a user's file, and it can start another program, so it is held to this:
+
+- It is `agent: false`. Only a person's click reaches it. No model, chat or MCP client can call it.
+- It takes an id, and the path must still be a regular file, not a link. No shell is used: `open` on
+  macOS, `explorer` on Windows and `xdg-open` on Linux, with the path as one argument.
+- The OS picks the app by the name, so the name decides. It refuses a name with no extension, and any
+  extension that runs or installs something or follows a link, such as `.app`, `.command`, `.exe`,
+  `.lnk`, `.sh`, `.jar` or `.desktop`. Case and trailing dots do not matter.
+- It refuses a file with an execute bit, which macOS could run in Terminal, unless its contents are a
+  document, image or media type. exFAT and network drives set that bit on every file.
+- Everything else opens. This is a refusal list, so a type it misses would run. Add to it, never remove.
+- The default app then reads a hostile file. Office decides about macros, and a browser about the
+  scripts in a page. Quarantine and Mark of the Web still apply, as `open_file` does not touch them.
+
 ## API keys
 
 - Stored in `credentials.toml` in the config directory, as plain text. File mode `0600`, directory
@@ -237,7 +260,8 @@ In the UI, per [File previews](ui.md#file-previews):
 Keys in environment variables are ignored until you allow them, then they take priority.
 
 - The choice is `use_env` inside `credentials.toml`, so nothing in a config file can turn it on.
-- It is asked once, on an interactive run that finds a key. The default is no.
+- It is asked once, on an interactive run that finds a key. The default is no. In the UI, the button on
+  the first screen is the answer.
 - Unanswered and not in a terminal means no key, so the job refuses to start.
 - Change it with `jevonganize auth env on|off`.
 

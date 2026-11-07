@@ -6,6 +6,7 @@ import { loadConfig, UserError } from '../core/config.ts';
 import { systemLanguage } from '../core/system-language.ts';
 import { sanitize } from '../core/sanitize.ts';
 import { addAskCommand } from './ask.ts';
+import { addCatalogCommands } from './catalog.ts';
 import { addFileCommands } from './files.ts';
 import { addSettingsCommands } from './settings.ts';
 import { addSetupCommand } from './setup.ts';
@@ -56,6 +57,7 @@ export function buildProgram(): Command {
     .action(startCommand);
   addSetupCommand(program);
   addFileCommands(program);
+  addCatalogCommands(program);
   addSettingsCommands(program);
   addAskCommand(program);
   command(program, 'mcp', t('Run the MCP server over stdio'))

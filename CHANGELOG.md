@@ -6,6 +6,23 @@ This project follows [Semantic Versioning](https://semver.org).
 
 First version, not released yet.
 
+- Excel and PowerPoint files preview as a drawn page again, not as raw bytes.
+- A double click, or the Open button in the inspector, opens a file in its default app. Executables,
+  scripts, links and files with no extension are refused, and Reveal shows them instead.
+- Add a topic catalog of public subject names. `topics pick` sends a folder's file names to the
+  decision model, which weighs every topic and adds the 100 best to `topic`. `setup` does this too.
+- First run now chooses topics, organizes and reads proper names by itself, in `setup` and the UI.
+  `organize` applies its plan unless `--no-apply`, and `thresholds.apply` defaults to 0.5, so nothing
+  waits for review. Sensitivity facets no longer need 0.95.
+- The folder picker works like a Finder list, with sorting, a filter and places. Onboarding can use
+  `OPENAI_API_KEY` from the environment with one click. A folder it cannot open says so, instead of
+  reporting an internal error.
+- The Organize screen manages topics.
+- Onboarding has a Topics step: search the catalog, or let the model choose, and remove any pick.
+- `organize` also reads proper names: the decision model finds files that hold them, a light model
+  reads them out, and they join the run's plan as `entity:` tags, outside `max_tags`. New `[ner]`
+  setting and `names` pack. The Names screen and `names add` manage them.
+
 - Reuse extraction workers, PDF parses and recent unchanged extraction results; skip image rendering
   and encoding when images are disabled. Merge simultaneous thumbnail requests and prioritize
   previews over queued background extraction.

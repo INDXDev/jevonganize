@@ -121,16 +121,30 @@ const tools: { [K in ToolName]: (input: ToolMap[K][0]) => ToolMap[K][1] } = {
     return librariesNow().find((l) => l.path === path)!;
   },
   remove_library: ({ path }) => void (libraries = libraries.filter((l) => l !== path)),
-  browse_dirs: ({ path = HOME }) => ({
-    path,
-    parent: path === HOME ? null : path.slice(0, path.lastIndexOf('/')),
-    dirs:
+  browse_dirs: ({ path = HOME }) => {
+    const dirs =
       path === HOME
         ? ['Documents', 'Downloads', 'Pictures']
         : path.endsWith('Documents')
           ? ['Finance', 'Notes', 'Projects']
-          : [],
-  }),
+          : [];
+    return {
+      path,
+      parent: path === HOME ? null : path.slice(0, path.lastIndexOf('/')),
+      places: [HOME, `${HOME}/Documents`, `${HOME}/Downloads`, `${HOME}/Pictures`],
+      entries: [
+        ...dirs.map((name, i) => ({
+          name,
+          dir: true,
+          size: 96,
+          modified: Date.UTC(2026, 5 - i, 3),
+        })),
+        { name: 'invoice-44.pdf', dir: false, size: 48_210, modified: Date.UTC(2026, 3, 9) },
+        { name: '.DS_Store', dir: false, size: 6148, modified: Date.UTC(2026, 1, 2) },
+      ],
+    };
+  },
+
   scan: () => runJob('scan', files.length),
   search_files: search,
   get_file: ({ id }) => detail(id!, reviews),
@@ -233,7 +247,23 @@ const tools: { [K in ToolName]: (input: ToolMap[K][0]) => ToolMap[K][1] } = {
     return made;
   },
   suggest_tags: () => [],
-  list_vocabulary: () => vocabulary,
+  search_catalog: ({ text }) =>
+    [
+      'finance/budgeting',
+      'finance/invoices',
+      'finance/tax-returns',
+      'technology/machine-learning',
+    ].filter((v) => v.includes(text)),
+  pick_topics: () => ({
+    topics: Array.from({ length: 100 }, (_, i) => ({
+      value: `finance/topic-${i}`,
+      probability: 0.97,
+    })),
+    files: 12,
+    tokens: 250_000,
+    cost_usd: 0.025,
+  }),
+  list_vocabulary: ({ facet }) => vocabulary.filter((v) => !facet || v.facet === facet),
   set_vocabulary: ({ facet, value, state }) => {
     const entry = vocabulary.find((v) => v.facet === facet && v.value === value);
     if (entry) entry.state = state;
@@ -265,7 +295,7 @@ const tools: { [K in ToolName]: (input: ToolMap[K][0]) => ToolMap[K][1] } = {
     return (config = merge(config, patch));
   },
   list_keys: () => ({
-    keys: [{ provider: 'openai', source: hasKey ? 'file' : null }],
+    keys: [{ provider: 'openai', source: hasKey ? 'file' : null, in_env: true }],
     env_allowed: null,
   }),
   set_api_key: () => void (hasKey = true),
@@ -276,6 +306,7 @@ const tools: { [K in ToolName]: (input: ToolMap[K][0]) => ToolMap[K][1] } = {
   },
   set_env_keys: () => {},
   reveal_file: () => {},
+  open_file: () => {},
   doctor: () => [{ name: 'runtime', ok: true, detail: 'Node 24' }],
 };
 

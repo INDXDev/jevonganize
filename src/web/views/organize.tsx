@@ -10,6 +10,7 @@ import { SendNotice } from '../components/send-notice.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { Checkbox, Field, Input, Select, Switch } from '../components/ui/field.tsx';
 import { formatCount, needsKey, shortPath } from '../lib.ts';
+import { TopicsField } from './organize-vocabulary.tsx';
 import { setView, useView } from '../tabs.ts';
 import { toFileQuery, type View } from '../view-query.ts';
 
@@ -127,7 +128,7 @@ function useRunSetup() {
   const options = useViewOptions();
   const [limit, setLimit] = useState<number>();
   const [picked, setPicked] = useState<Set<string>>();
-  const [apply, setApply] = useState(false);
+  const [apply, setApply] = useState(true);
   const [problem, setProblem] = useState('');
 
   const enabled = useMemo(
@@ -161,6 +162,7 @@ function useRunSetup() {
     setPicked,
     apply,
     setApply,
+    canChoose: !missingKey,
     problem,
     chosen,
     estimate,
@@ -235,14 +237,19 @@ function SetupForm({ setup }: { setup: RunSetup }) {
       <Field label={t('Facets')} help={facetsHelp}>
         <FacetPicker facets={setup.facets} chosen={setup.chosen} onChange={setup.setPicked} />
       </Field>
+      <TopicsField folder={view.folder} canChoose={setup.canChoose} />
       <section className="space-y-1.5 border-t pt-3">
         <h3 className="label">{t('Before you start')}</h3>
         <SendNotice estimate={estimate} provider={status?.provider ?? t('your provider')} />
         <p className="text-sm text-muted-foreground">
           {' '}
-          {t(
-            'Nothing is written until you apply the plan. Answers are cached, so running the same files again costs nothing.',
-          )}{' '}
+          {setup.apply
+            ? t(
+                'Tags are written when the run ends, and undo reverses them. Answers are cached, so running the same files again costs nothing.',
+              )
+            : t(
+                'Nothing is written until you apply the plan. Answers are cached, so running the same files again costs nothing.',
+              )}{' '}
         </p>
       </section>
       {setup.missingKey && <MissingKey provider={status?.provider} />}

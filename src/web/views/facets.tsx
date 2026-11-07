@@ -6,7 +6,7 @@ import { act, useTool } from '../api.ts';
 import { Block } from '../components/block.tsx';
 import { Divider, Pane, Panes } from '../components/pane.tsx';
 import { Button } from '../components/ui/button.tsx';
-import { Checkbox } from '../components/ui/field.tsx';
+import { Checkbox, Input } from '../components/ui/field.tsx';
 import { cn, keyLabel, useReset } from '../lib.ts';
 import { activeTab, notify, setView, useActions, useView } from '../tabs.ts';
 import { parseView } from '../view-query.ts';
@@ -74,6 +74,38 @@ function Sample({ draft, save }: { draft: Facet; save: () => Promise<boolean> })
   );
 }
 
+/** Finds catalog topics by text. A click makes one a value of `topic`. */
+function CatalogSearch() {
+  const [text, setText] = useState('');
+  const { data: values = [] } = useTool(
+    'search_catalog',
+    { text: text.toLowerCase(), limit: 20 },
+    { enabled: text.length > 1 },
+  );
+  return (
+    <section className="flex flex-col gap-1 px-1.5 pb-2">
+      <Input
+        aria-label={t('Search topic catalog')}
+        placeholder={t('Search topic catalog')}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      />
+      {text.length > 1 &&
+        values.map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-label={t('Add topic {value}', { value })}
+            onClick={() => void act('set_vocabulary', { facet: 'topic', value, state: 'active' })}
+            className="truncate text-left font-mono text-xs text-muted-foreground hover:text-foreground"
+          >
+            {value}
+          </button>
+        ))}
+    </section>
+  );
+}
+
 function Packs(props: { facets: FacetInfo[]; current?: string; actions: ReactNode }) {
   const { facets, current, actions } = props;
   const packs = useMemo(() => [...Map.groupBy(facets, (f) => f.pack)], [facets]);
@@ -86,6 +118,7 @@ function Packs(props: { facets: FacetInfo[]; current?: string; actions: ReactNod
       minSize={200}
       className="p-1.5"
     >
+      <CatalogSearch />
       {packs.map(([pack, list]) => (
         <section key={pack} className="pb-2">
           <label className="flex h-row items-center gap-2 px-1.5 text-sm font-medium">

@@ -66,7 +66,8 @@ See [tags](tags.md) for how tags are stored, and [presets](presets.md) for how f
 
 ## Presets and packs
 
-A **preset** is a facet that ships with Jevonganize. There are about 100. A facet you write yourself
+A **preset** is a facet that ships with Jevonganize. There are about 100, plus a much larger
+[topic catalog](presets.md#topic-catalog) that a model chooses from. A facet you write yourself
 is a **custom facet**. Both use the same format.
 
 A **pack** is a named group of up to 10 presets, such as `finance` or `sensitivity`. You turn on packs,
@@ -94,15 +95,14 @@ A plan can be undone. See [architecture](architecture.md#the-two-flows).
 
 ## Confidence
 
-Every answer comes with a number from 0 to 1. Two thresholds sort answers into three bands:
+Every answer comes with a number from 0 to 1. Tagging changes no file and `undo` reverses it, so by
+default nothing waits for a person. Raise `thresholds.apply` above `thresholds.review` to bring back a
+review band between them:
 
 | Confidence | Default | What happens |
 | --- | --- | --- |
-| High | 0.85 or above | The tag joins the plan |
-| Middle | 0.50 to below 0.85 | The tag goes to the review queue, for a person to accept or reject |
+| Applied | 0.50 or above | The tag joins the plan, and `organize` applies it |
 | Low | Below 0.50 | The answer is kept in the index, and no tag is proposed |
-
-Sensitivity facets need 0.95 to apply, so most of them end up in review.
 
 Some answers have no usable number. Chat models only estimate one, and those answers go to review
 rather than apply. See [presets](presets.md#thresholds) for the exact rules.

@@ -129,6 +129,25 @@ function applyIfAsked(job: Job) {
   }
 }
 
+/** Asks the model which catalog topics fit a folder. Adds nothing. */
+export async function chooseTopics(folder?: string): Promise<string[]> {
+  const picks = await act('pick_topics', { query: { folder } });
+  return picks?.topics.map((topic) => topic.value) ?? [];
+}
+
+/** Makes catalog topics values of `topic`. */
+export async function addTopics(values: string[]) {
+  for (const value of values) {
+    await act('set_vocabulary', { facet: 'topic', value, state: 'active' });
+  }
+  notify(t('Added {count} topics', { count: values.length }));
+}
+
+/** Lets the model choose catalog topics for a folder, and adds them with no further step. */
+export async function pickTopics(folder?: string) {
+  await addTopics(await chooseTopics(folder));
+}
+
 /** Starts an organize job. A refusal, such as no key, throws for the form to show. */
 export async function organize(input: ToolMap['organize'][0], apply: boolean) {
   const job = await call('organize', input);

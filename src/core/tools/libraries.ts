@@ -1,7 +1,7 @@
 /** The folders in the index, and scanning them. */
-import { readdir, stat } from 'node:fs/promises';
+import { lstat, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { ProviderName } from '../../types.ts';
 import { ifExists, indexedPath, UserError } from '../config.ts';
@@ -21,6 +21,9 @@ import {
   type ToolTable,
 } from './shared.ts';
 import { syncWatchers } from './watching.ts';
+
+/** Why a folder cannot be listed, when that is the person's to fix: a file, or no permission. */
+const UNREADABLE = new Set(['ENOTDIR', 'EACCES', 'EPERM']);
 
 /** Providers with a key from any source. */
 async function providersWithKeys(): Promise<ProviderName[]> {
@@ -53,6 +56,16 @@ async function scanRoots(ctx: Context, roots: string[], named: boolean, run: Job
     }
   }
   return { totals, warnings, ids };
+}
+
+const PLACES = ['Desktop', 'Documents', 'Downloads', 'Pictures', 'Movies', 'Videos', 'Music'];
+
+/** The folders a file dialog lists at its side, where they exist. */
+async function usualPlaces(): Promise<string[]> {
+  const home = homedir();
+  const paths = PLACES.map((name) => join(home, name));
+  const found = await Promise.all(paths.map((path) => ifExists(stat(path))));
+  return [home, ...paths.filter((_, index) => found[index]?.isDirectory())];
 }
 
 /** The tools on libraries. */
@@ -112,22 +125,36 @@ export const libraryTools = {
   },
 
   browse_dirs: {
-    description: 'Lists child folders, for the folder picker.',
+    description: 'Lists a folder and the usual places, for the folder picker.',
     input: z.strictObject({ path: z.string().optional() }),
     writes: false,
     agent: false,
     run: async ({ path }) => {
       const dir = resolve(path ?? homedir());
-      const entries = await ifExists(readdir(dir, { withFileTypes: true }));
+      const entries = await ifExists(readdir(dir, { withFileTypes: true })).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (UNREADABLE.has(error.code ?? '')) throw new UserError(`Cannot open ${dir}`);
+          throw error;
+        },
+      );
       if (!entries) throw new UserError(`${dir} does not exist`);
       const parent = dirname(dir);
       return {
         path: dir,
         parent: parent === dir ? null : parent,
-        dirs: entries
-          .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-          .map((entry) => entry.name)
-          .toSorted(),
+        places: await usualPlaces(),
+        entries: await Promise.all(
+          entries.map(async (entry) => {
+            // lstat, so a link reports itself. It is listed but never entered.
+            const info = await lstat(join(dir, entry.name)).catch(() => undefined);
+            return {
+              name: entry.name,
+              dir: entry.isDirectory(),
+              size: info?.size ?? null,
+              modified: info?.mtimeMs ?? null,
+            };
+          }),
+        ),
       };
     },
   },

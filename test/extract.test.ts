@@ -97,36 +97,38 @@ describe('audio and video', () => {
   });
 });
 
-describe('mail and archives', () => {
+/** A mail with a body, then an attachment too big to parse, then a part past the limit. */
+function mailWithBigAttachment() {
+  const attachmentBase64 = `${'QUJD'.repeat(19)}\r\n`.repeat(50_000); // about 3.9 MB
+  return [
+    'From: Mira <mira@example.test>',
+    'Subject: Big one',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="b"',
+    '',
+    '--b',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    'The body comes first.',
+    '--b',
+    'Content-Type: application/pdf',
+    'Content-Disposition: attachment; filename="big.pdf"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    attachmentBase64,
+    '--b',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    'Past the limit.',
+    '--b--',
+    '',
+  ].join('\r\n');
+}
+
+describe('mail', () => {
   it('reads a big .eml only as far as its start, and still names what it reached', async () => {
     const path = join(temp, 'big.eml');
-    const blob = `${'QUJD'.repeat(19)}\r\n`.repeat(50_000); // about 3.9 MB of base64
-    await writeFile(
-      path,
-      [
-        'From: Mira <mira@example.test>',
-        'Subject: Big one',
-        'MIME-Version: 1.0',
-        'Content-Type: multipart/mixed; boundary="b"',
-        '',
-        '--b',
-        'Content-Type: text/plain; charset=utf-8',
-        '',
-        'The body comes first.',
-        '--b',
-        'Content-Type: application/pdf',
-        'Content-Disposition: attachment; filename="big.pdf"',
-        'Content-Transfer-Encoding: base64',
-        '',
-        blob,
-        '--b',
-        'Content-Type: text/plain; charset=utf-8',
-        '',
-        'Past the limit.',
-        '--b--',
-        '',
-      ].join('\r\n'),
-    );
+    await writeFile(path, mailWithBigAttachment());
     const state = await extractFile(path, config());
     expect(state.text).toContain('The body comes first.');
     expect(state.text).not.toContain('Past the limit.');
@@ -164,7 +166,9 @@ describe('mail and archives', () => {
     expect(state.metadata.subject).toBe('Ferry timetable change');
     expect(state.metadata.to).toContain('Oren Vale');
   });
+});
 
+describe('archives', () => {
   it('lists a zip without unpacking it, within zip_entries', async () => {
     const state = await extract('archive.zip');
     expect(state.text.split('\n')).toEqual([

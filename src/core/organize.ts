@@ -23,8 +23,10 @@ import {
   modelTarget,
   type ModelTarget,
   resolveModel,
+  type ResolvedChatModel,
   type ResolvedModel,
 } from '../ai/providers.ts';
+import { extractNames } from '../ai/suggest.ts';
 import { extractFile, isFailed } from '../extract/index.ts';
 import type { Answer, Facet, FileQuery, FileRow, FileState, Tag, TagOp } from '../types.ts';
 import { type Config, errorMessage, UserError } from './config.ts';
@@ -34,6 +36,7 @@ import { derive, resolve } from './facet-answers.ts';
 import {
   appliesTo,
   isEnabled,
+  isName,
   loadFacets,
   tagFacet,
   toQuestions,
@@ -41,7 +44,9 @@ import {
 } from './facets.ts';
 import { contentStamp, type JobRun, proposePlan, statFields } from './plans.ts';
 import { sharedExclusions } from './exclusions.ts';
+import { holdsNames, NAME_GATE, nameReader, refusedSuggestions } from './names.ts';
 
+const NAME_FACET = 'entity';
 const LOW_CONFIDENCE_REASON = 'Not sure enough to apply';
 /** Rows between commits of what a run stores as it goes, as each commit waits for the disk. */
 const MAX_PENDING_ROWS = 64;
@@ -73,7 +78,11 @@ export async function facetsForRun(db: Db, config: Config, ids?: string[]): Prom
   const chosen = ids
     ? all.filter((facet) => ids.includes(facet.id) || ids.includes(facet.pack))
     : all.filter((facet) => isEnabled(facet, config));
-  return withVocabulary(chosen, db);
+  // Names go with every run. The gate only pays off with a model to read what it finds.
+  const reads = (await nameReader(config)) !== undefined;
+  const names = all.filter(({ id }) => id === NAME_FACET || (reads && id === NAME_GATE));
+  const facets = withVocabulary([...new Set([...chosen, ...names])], db);
+  return facets.filter((facet) => facet.id !== NAME_FACET || asksModel(facet));
 }
 
 /** Builds every model a run needs, so a missing key refuses before the first byte is sent. */
@@ -105,6 +114,8 @@ export interface RunSetup {
   config: Config;
   facets: Facet[];
   models: Models;
+  /** Reads proper names. Without it, a run reads none. */
+  ner?: ResolvedChatModel;
 }
 
 type FileChange = ReturnType<typeof planChange>;
@@ -170,7 +181,7 @@ function extractKey({ extractionSettings }: Session, path: string, info: BigIntS
   return createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 }
 
-function addUsage(tally: Tally, used: number, model: ResolvedModel): void {
+function addUsage(tally: Tally, used: number, model: Parameters<typeof estimateCost>[1]): void {
   tally.tokens += used;
   const price = estimateCost(used, model);
   tally.cost = tally.cost === null || price === null ? null : tally.cost + price;
@@ -235,7 +246,9 @@ function replaceableTags(mirror: MirrorTag[], facets: Facet[], answers: Answer[]
   const refused = new Set(answers.filter((answer) => answer.refused).map(({ facet }) => facet));
   const answered = new Set(facets.map((facet) => facet.id).filter((name) => !refused.has(name)));
   // A tag the app wrote may follow a new answer. A person's tag is never touched.
-  return mirror.filter((row) => row.ai && answered.has(tagFacet(row.tag))).map((row) => row.tag);
+  return mirror
+    .filter((row) => row.ai && answered.has(tagFacet(row.tag)) && !isName(row.tag))
+    .map((row) => row.tag);
 }
 
 /** Steps 3 and 5 for one file: what to add, what to drop, and what a person should look at. */
@@ -255,10 +268,12 @@ function planChange(
   const wanted = new Set([...apply, ...review.map((item) => item.tag)]);
   const remove = replaceable.filter((tag) => !wanted.has(tag));
   // `resolve` left room for `keptTags` only. What stays of the replaceable tags counts as well.
-  const staying = keptTags.length + replaceable.length - remove.length;
+  const staying =
+    keptTags.filter((tag) => !isName(tag)).length + replaceable.length - remove.length;
   const freeSlots = Math.max(config.max_tags - staying, 0);
+  const fresh = apply.filter((tag) => !replaceable.includes(tag));
   return {
-    add: apply.filter((tag) => !replaceable.includes(tag)).slice(0, freeSlots),
+    add: [...fresh.filter(isName), ...fresh.filter((tag) => !isName(tag)).slice(0, freeSlots)],
     remove,
     review: review.filter((item) => !replaceable.includes(item.tag)),
   };
@@ -280,12 +295,21 @@ interface FileFacts extends FileIdentity {
 }
 
 /** Steps 3 and 5 for a file with its answers. Its op and result wait in the tally. */
-function planFile(session: Session, file: FileFacts, applicable: Facet[], answers: Answer[]): void {
+function planFile(
+  session: Session,
+  file: FileFacts,
+  applicable: Facet[],
+  answers: Answer[],
+  names: Tag[] = [],
+): void {
   const { config, tally } = session;
   const { row, stamp, extract_key, hash, state_hash, mime, metadata } = file;
-  const derived = applicable.flatMap((facet) => derive(facet, { metadata }, config) ?? []);
-  const { add, remove, review } = planChange(session, row.id, applicable, { answers, derived });
-  tally.ops.push({ file_id: row.id, add, remove, stamp });
+  const judged = applicable.filter((facet) => facet.id !== NAME_GATE);
+  const asked = answers.filter((answer) => answer.facet !== NAME_GATE);
+  const derived = judged.flatMap((facet) => derive(facet, { metadata }, config) ?? []);
+  const found = { answers: asked, derived };
+  const { add, remove, review } = planChange(session, row.id, judged, found);
+  tally.ops.push({ file_id: row.id, add: [...new Set([...add, ...names])], remove, stamp });
   const result = { status: 'organized' as const, hash, state_hash, extract_key, mime, metadata };
   tally.results.push({ id: row.id, result, review });
 }
@@ -312,6 +336,22 @@ function planFromLastResult(session: Session, identity: FileIdentity): boolean {
   return true;
 }
 
+/** The proper names in a file the gate passed. A failure here costs the names, not the file's tags. */
+async function readNames(session: Session, row: FileRef, state: FileState, answers: Answer[]) {
+  const { db, ner, modelLimit, tally } = session;
+  if (!ner || !holdsNames(answers)) return [];
+  const known = [...(db.fileRow(row.id)?.tags ?? []), ...refusedSuggestions(db, row.id)];
+  try {
+    const { tags, tokens } = await modelLimit(() => extractNames(state, ner, known));
+    addUsage(tally, tokens, ner);
+    return tags;
+  } catch (error) {
+    if (error instanceof UserError) throw error;
+    tally.warnings.push(`${row.path}: ${errorMessage(error)}`);
+    return [];
+  }
+}
+
 /** Steps 1 to 5 for a file that has to be read. */
 async function readAndPlan(session: Session, identity: FileIdentity): Promise<void> {
   const { config, facets, pending, tally } = session;
@@ -324,7 +364,8 @@ async function readAndPlan(session: Session, identity: FileIdentity): Promise<vo
   const applicable = facets.filter((facet) => appliesTo(facet, mime));
   const { answers, warnings, state_hash } = await askModels(session, row.id, state, applicable);
   tally.warnings.push(...warnings.map((warning) => `${row.path}: ${warning}`));
-  planFile(session, { ...identity, hash, state_hash, mime, metadata }, applicable, answers);
+  const names = await readNames(session, row, state, answers);
+  planFile(session, { ...identity, hash, state_hash, mime, metadata }, applicable, answers, names);
 }
 
 /** Steps 1 to 5 for one file. It stores answers and text, and leaves the rest in the tally. */

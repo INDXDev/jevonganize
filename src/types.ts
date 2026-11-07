@@ -47,6 +47,15 @@ export interface Facet {
   profile?: string;
 }
 
+/** What `pick_topics` chose from the catalog, the likeliest first. */
+export interface TopicPicks {
+  topics: { value: string; probability: number }[];
+  /** How many file names were sent. */
+  files: number;
+  tokens: number;
+  cost_usd: number | null;
+}
+
 /** A facet as listed by `list_facets`. */
 export interface FacetInfo extends Facet {
   enabled: boolean;
@@ -197,7 +206,7 @@ export interface Job {
   total: number;
   /** The file being worked on. */
   current?: string;
-  /** Provider tokens and USD so far, for `organize`. */
+  /** Provider tokens and USD so far, for `organize` and `names`. */
   tokens?: number;
   cost_usd?: number | null;
   /** The plan an `organize` job produced, or the one an `apply` or `undo` job works on. */
@@ -268,9 +277,20 @@ export interface Status {
   keys: ProviderName[];
 }
 
+/** What `browse_dirs` reports: a folder, for the folder picker. */
+export interface DirListing {
+  path: string;
+  parent: string | null;
+  /** Home, and the usual folders in it. */
+  places: string[];
+  /** `size` and `modified` are null when the entry could not be read. */
+  entries: { name: string; dir: boolean; size: number | null; modified: number | null }[];
+}
+
 /** What `list_keys` reports. Never the keys themselves. */
 export interface KeyList {
-  keys: { provider: ProviderName; source: 'env' | 'file' | null }[];
+  /** `in_env` says the variable is set, even while environment keys are off. */
+  keys: { provider: ProviderName; source: 'env' | 'file' | null; in_env: boolean }[];
   /** Whether keys from the environment are used. Null until someone has answered. */
   env_allowed: boolean | null;
 }
@@ -297,7 +317,7 @@ export interface ToolMap {
   list_libraries: [Record<string, never>, Library[]];
   add_library: [{ path: string }, Library];
   remove_library: [{ path: string }, void];
-  browse_dirs: [{ path?: string }, { path: string; parent: string | null; dirs: string[] }];
+  browse_dirs: [{ path?: string }, DirListing];
   scan: [{ path?: string }, Job];
   search_files: [FileQuery, { files: FileRow[]; total: number }];
   get_file: [{ id?: number; path?: string }, FileDetail];
@@ -308,6 +328,8 @@ export interface ToolMap {
   save_facet: [Facet, Facet];
   delete_facet: [{ id: string }, void];
   set_enabled: [{ ids: string[]; enabled: boolean }, void];
+  search_catalog: [{ text: string; limit?: number }, string[]];
+  pick_topics: [{ query: FileQuery; limit?: number }, TopicPicks];
   estimate: [{ query: FileQuery; facets?: string[] }, Estimate];
   organize: [{ query: FileQuery; facets?: string[] }, Job];
   cancel_job: [{ id: string }, void];
@@ -339,6 +361,7 @@ export interface ToolMap {
   remove_api_key: [{ provider: ProviderName }, { removed: boolean }];
   set_env_keys: [{ allowed: boolean }, void];
   reveal_file: [{ id: number }, void];
+  open_file: [{ id: number }, void];
   doctor: [Record<string, never>, Check[]];
 }
 

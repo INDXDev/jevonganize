@@ -15,6 +15,7 @@ import {
   Sparkles,
   Sun,
   Tags as TagsIcon,
+  Contact,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -38,6 +39,7 @@ import { Onboarding } from './views/onboarding.tsx';
 import { Organize } from './views/organize.tsx';
 import { Review } from './views/review.tsx';
 import { Settings } from './views/settings.tsx';
+import { Names } from './views/names.tsx';
 import { Tags } from './views/tags.tsx';
 
 const Chat = lazy(() => import('./views/chat.tsx'));
@@ -47,6 +49,7 @@ const screens: Record<Screen, { view: () => ReactNode; icon: LucideIcon }> = {
   organize: { view: Organize, icon: Sparkles },
   review: { view: Review, icon: CheckCheck },
   tags: { view: Tags, icon: TagsIcon },
+  names: { view: Names, icon: Contact },
   facets: { view: Facets, icon: SlidersHorizontal },
   activity: { view: Activity, icon: ActivityIcon },
   settings: { view: Settings, icon: Gear },

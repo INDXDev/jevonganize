@@ -34,7 +34,7 @@ it, so neither imports the other.
 | `list_libraries` | none | `Library[]` | no | yes |
 | `add_library` | `path` | `Library`, stored by real path. A secret folder is refused | yes | no |
 | `remove_library` | `path` | `void` (index only; tags stay) | yes | no |
-| `browse_dirs` | `path?` | child directories, for the folder picker | no | no |
+| `browse_dirs` | `path?` | `DirListing`: a folder's entries and the usual places, for the folder picker | no | no |
 | `scan` | `path?` | `Job` | yes | yes |
 | `search_files` | `FileQuery`, 50 rows unless `limit` says otherwise | `{ files: FileRow[], total }` | no | yes |
 | `get_file` | `id` or `path` | `FileDetail` | no | yes |
@@ -58,16 +58,19 @@ it, so neither imports the other.
 | `list_reviews` | `tag?`, `limit?` | open `ReviewItem[]`, ordered by tag, then confidence | no | yes |
 | `resolve_reviews` | `ids`, `accept` | `Plan` of the accepted items, or `null` | stores a plan | yes, with approval |
 | `suggest_tags` | `id` | candidate tags, as review items | yes | yes, with approval |
+| `search_catalog` | `text`, `limit?` | catalog values containing the text | no | yes |
+| `pick_topics` | `query`, `limit?` (100) | `TopicPicks`: the likeliest catalog values for the file names. Changes nothing | no | yes, with approval |
 | `list_vocabulary` | `facet?` | `VocabularyEntry[]`: values of open facets | no | yes |
 | `set_vocabulary` | `facet`, `value`, `state` | `void` | yes | no |
 | `cleanup_report` | none | near-duplicates, one-file tags, over-broad tags | no | yes |
 | `get_config` | none | config, its JSON Schema, and the config, data and cache paths | no | no |
 | `set_config` | partial config | config | yes | no |
-| `list_keys` | none | `KeyList`: each provider's key source, never a key | no | no |
+| `list_keys` | none | `KeyList`: each provider's key source and whether its variable is set, never a key | no | no |
 | `set_api_key` | `provider`, `key` | `void` | yes | no |
 | `remove_api_key` | `provider` | `{ removed }` | yes | no |
 | `set_env_keys` | `allowed` | `void`: allows or refuses keys from the environment | yes | no |
 | `reveal_file` | `id` | `void`: shows it in the file manager | no | no |
+| `open_file` | `id` | `void`: opens it in its default app. Refuses executables, see [security.md](security.md#opening-a-file) | no | no |
 | `doctor` | none | checks: runtime, key, volumes, optional tools | no | yes |
 
 `FileQuery.hide_dotfiles` leaves out names starting with a dot and anything in such a folder, counted
@@ -364,7 +367,7 @@ enabled = ["core", "time", "sensitivity", "media"]   # packs, or single facet id
 disabled = []
 
 [thresholds]
-apply = 0.85                     # at or above: joins the plan
+apply = 0.5                      # at or above: joins the plan
 review = 0.50                    # at or above: review queue. Below: dropped
 estimated_to_review = true       # answers without native probabilities never auto-apply
 

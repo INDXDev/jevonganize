@@ -9,6 +9,7 @@ export const SCREENS = [
   { id: 'organize', title: 'Organize', key: 'o' },
   { id: 'review', title: 'Review', key: 'r' },
   { id: 'tags', title: 'Tags', key: 't' },
+  { id: 'names', title: 'Names', key: 'n' },
   { id: 'facets', title: 'Facets', key: 'f' },
   { id: 'activity', title: 'Activity', key: 'a' },
   { id: 'settings', title: 'Settings', key: 's' },
@@ -106,7 +107,8 @@ export function sortOf(query: FileQuery) {
 /** The separator of a path from the server, whatever OS the browser is on. */
 export const pathSep = (path: string) => (path.startsWith('/') ? '/' : '\\');
 
-function lastSegment(path: string) {
+/** The last folder or file name in a path. */
+export function lastSegment(path: string) {
   return path.split(pathSep(path)).findLast(Boolean) ?? path;
 }
 

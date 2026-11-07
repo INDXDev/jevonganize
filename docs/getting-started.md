@@ -48,26 +48,26 @@ has the full table, and [Providers](providers.md) lists other options.
 
 ## Onboarding
 
-The first launch shows one screen. It has four steps.
+The first launch shows one screen. It has five steps.
 
-1. **OpenAI key.** Paste an API key. It is stored in a file only you can read. Without one, you can
+1. **OpenAI key.** Paste an API key, stored in a file only you can read, or use `OPENAI_API_KEY` from
+   the environment with one click. Without one, you can
    still scan and browse.
 2. **Folder.** Pick a folder, such as Downloads. It is scanned at once.
 3. **Packs.** Packs are sets of questions. Core, Time, Sensitivity and Media are on by default.
-4. **Cost.** The screen shows what will be sent, to which provider, and what it will cost. By default
+4. **Topics.** Search the [catalog](presets.md#topic-catalog) and pick topics, or press **Choose for
+   me**. The model reads your file names and picks 100, about $0.16 at `gpt-6-luna` prices.
+5. **Cost.** The screen shows what will be sent, to which provider, and what it will cost. By default
    it covers the first 200 files, about $0.07 at `gpt-6-luna` prices. Tick the box to run on all files.
 
-Press **Organize**. Each file gets one model call, and its answers are cached, so it is never paid for
-twice. No tags are written yet.
+Press **Organize**. With nothing further to approve, Jevonganize:
 
-The Review screen then opens with two things.
+1. Adds your topics. If you chose none, it first sends the folder's file names to the model, which
+   picks 100.
+2. Gives each file one model call, cached so it is never paid for twice, and applies the tags.
+3. Reads proper names out of the files that hold them, and applies those as tags.
 
-- **The plan.** Tags with high confidence. It shows how many files get which tags.
-- **The review queue.** Tags in the middle band, grouped by tag. Press `a` to accept, `r` to reject,
-  `Shift+A` to accept a whole group. Accepting writes that tag at once, and `Mod+Z` undoes it.
-
-Press **Apply** on the plan. Tags are now on your files. On macOS, open Finder to see them. Press
-`Mod+Z` to undo the plan.
+On macOS, open Finder to see the tags. Press `Mod+Z` to undo a plan.
 
 Tags are not visible in Explorer on Windows or in GNOME Files on Linux. See
 [Troubleshooting](troubleshooting.md#tags-not-visible).
@@ -101,31 +101,21 @@ About 1.4M tokens, about $0.14 on openai gpt-6-luna
 Nothing was sent.
 ```
 
-Organize. This sends file data and costs money, but it writes no tags:
+Organize. This sends file data, costs money and writes tags, which `undo` reverses:
 
 ```text
 $ jevonganize organize ~/Downloads
 Organizing 412/412
 Plan 7f3a9c21: organize ~/Downloads
   387 files, 1,204 tags added, 0 removed
-52 items need review: jevonganize review
-Nothing was written. Run: jevonganize apply 7f3a9c21
+Applied 7f3a9c21: 387 files, 1,204 tags added.
+Undo: jevonganize undo 7f3a9c21
 ```
 
-Look at what it found, and settle the review queue:
+Look at what it did:
 
 ```sh
 jevonganize plans 7f3a9c21
-jevonganize review
-jevonganize review --tag doc-type:invoice --accept all
-```
-
-Apply the plan:
-
-```text
-$ jevonganize apply 7f3a9c21
-Applied 7f3a9c21: 387 files, 1,204 tags added.
-Undo: jevonganize undo 7f3a9c21
 ```
 
 Use your tags:

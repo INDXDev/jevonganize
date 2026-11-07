@@ -1,6 +1,6 @@
 import { t } from '../i18n/index.ts';
 import { useQueries } from '@tanstack/react-query';
-import { FolderOpen } from 'lucide-react';
+import { ExternalLink, FolderOpen } from 'lucide-react';
 import { useEffect } from 'react';
 import type { FileDetail } from '../../types.ts';
 import { act, call, useTool } from '../api.ts';
@@ -115,6 +115,20 @@ function RevealButton({ id }: { id: number }) {
   );
 }
 
+function OpenButton({ id }: { id: number }) {
+  return (
+    <Button
+      variant="ghost"
+      icon
+      aria-label={t('Open in default app')}
+      title={t('Open in default app')}
+      onClick={() => void act('open_file', { id })}
+    >
+      <ExternalLink />
+    </Button>
+  );
+}
+
 function Subject(props: { many: boolean; id?: number; file?: FileDetail }) {
   const { many, id, file } = props;
   if (many) return <Selection />;
@@ -142,7 +156,15 @@ export function Inspector() {
       minSize={260}
       maxSize="45%"
       title={showFile ? <span title={file?.name}>{file?.name ?? ' '}</span> : otherTitle}
-      actions={showFile && file && <RevealButton id={file.id} />}
+      actions={
+        showFile &&
+        file && (
+          <>
+            <OpenButton id={file.id} />
+            <RevealButton id={file.id} />
+          </>
+        )
+      }
       loading={!many && !!id && isLoading}
       error={many ? null : error}
       className={cn(showFile && '[&>section:first-of-type]:border-t-0')}

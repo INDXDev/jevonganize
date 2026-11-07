@@ -10,14 +10,16 @@ const Text = lazy(() => import('./text.tsx'));
 const Html = lazy(() => import('./html.tsx'));
 const Media = lazy(() => import('./media.tsx'));
 
-const isText = (mime: string) => /^text\/|json|xml|yaml|toml|javascript|typescript|x-sh/.test(mime);
+// Anchored at the end: `openxmlformats` in an Office type holds `xml`, and those files are zips.
+const isText = (mime: string) =>
+  /^text\/|\b(json|xml|yaml|toml|javascript|typescript|x-sh)$/.test(mime);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 const KINDS = { pdf: Pdf, word: Word, html: Html, media: Media, text: Text };
 
 /** The viewer for a type, or null when the server's thumbnail is the preview. */
-function previewKind(mime: string): keyof typeof KINDS | null {
+export function previewKind(mime: string): keyof typeof KINDS | null {
   if (mime === 'application/pdf') return 'pdf';
   if (mime === DOCX) return 'word';
   if (mime === 'text/html') return 'html';

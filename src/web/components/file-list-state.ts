@@ -212,5 +212,5 @@ export function useListInput(input: ListInput) {
     }
   };
 
-  return { click, preview: actions.preview };
+  return { click };
 }

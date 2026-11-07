@@ -63,7 +63,7 @@ describe('organize against a stub provider', () => {
     await writeFile(path, 'Invoice 44');
     await cli(['scan', root]);
 
-    const organized = await cli(['organize', root, '--facets', 'doc-type']);
+    const organized = await cli(['organize', root, '--facets', 'doc-type', '--no-apply']);
     expect(organized.code).toBe(0);
     expect(organized.stderr).toContain('tokens');
     expect(organized.stdout).toContain('doc-type:invoice');
@@ -82,22 +82,90 @@ describe('organize against a stub provider', () => {
     expect(await readTags(path)).toEqual([]);
   });
 
-  test('--json is NDJSON with plan_id last, --apply appends the apply job, and answers are cached', async () => {
+  test('organize applies by default, and undo takes the tags back', async () => {
     const path = join(root, 'invoice.txt');
     await writeFile(path, 'Invoice 44');
     await cli(['scan', root]);
-    const { stdout } = await cli(['organize', root, '--facets', 'doc-type', '--json']);
+    const { stdout } = await cli(['organize', root, '--facets', 'doc-type']);
+    expect(await readTags(path)).toEqual(['doc-type:invoice']);
+    const id = /undo ([0-9a-f]{8})/.exec(stdout)?.[1] ?? '';
+    await cli(['undo', id]);
+    expect(await readTags(path)).toEqual([]);
+  });
+
+  test('--json is NDJSON with plan_id last, applying appends the apply job, and answers are cached', async () => {
+    const path = join(root, 'invoice.txt');
+    await writeFile(path, 'Invoice 44');
+    await cli(['scan', root]);
+    const { stdout } = await cli([
+      'organize',
+      root,
+      '--facets',
+      'doc-type',
+      '--no-apply',
+      '--json',
+    ]);
     const organizeJob = ndjson<Job>(stdout).at(-1);
     expect(organizeJob).toMatchObject({ kind: 'organize', status: 'done' });
     expect(organizeJob?.plan_id).toBeTruthy();
     const dry = await cli(['organize', root, '--facets', 'doc-type', '--dry-run', '--json']);
     expect(JSON.parse(dry.stdout)).toMatchObject<Partial<Estimate>>({ cached: 1 });
 
-    const applied = await cli(['organize', root, '--facets', 'doc-type', '--apply', '--json']);
+    const applied = await cli(['organize', root, '--facets', 'doc-type', '--json']);
     const jobs = ndjson<Job>(applied.stdout);
     expect(jobs.at(-1)).toMatchObject({ kind: 'apply', status: 'done' });
     expect(requests).toHaveLength(1);
     expect(await readTags(path)).toEqual(['doc-type:invoice']);
+  });
+});
+
+/** Every sweep question picks its first option, and every topic is then confirmed. */
+function answerTopics() {
+  stub.removeAllListeners('request');
+  stub.on('request', (request, response) => {
+    let body = '';
+    request.on('data', (chunk) => (body += String(chunk)));
+    request.on('end', () => {
+      const { questions } = JSON.parse(body) as {
+        questions: Record<string, { type: string; criteria: object }>;
+      };
+      const answers = Object.entries(questions).map(([id, { type, criteria }]) => {
+        if (type === 'noul') return [id, { type, noul: 0.99 }];
+        const odds = Object.keys(criteria).map((option) => [option, option === 'c0' ? 1 : 0]);
+        return [id, { type, choice: 'c0', probabilities: Object.fromEntries(odds) }];
+      });
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ answers: Object.fromEntries(answers) }));
+    });
+  });
+}
+
+describe('topics against a stub provider', () => {
+  test('topics pick starts from an unknown folder, and --dry-run adds nothing', async () => {
+    answerTopics();
+    await writeFile(join(root, 'budget-2026.xlsx'), 'x');
+    const { code, stdout } = await cli(['topics', 'pick', root, '--dry-run', '--limit', '3']);
+    expect(code).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(3);
+    const again = await cli(['topics', 'pick', root, '--limit', '3']);
+    expect(again.stdout).toBe(stdout);
+    const next = await cli(['topics', 'pick', root, '--limit', '3']);
+    expect(next.stdout).not.toBe(stdout); // the first three are active now, so they are not offered
+  });
+
+  test('setup chooses topics at first start, and skips names with no [ner] key', async () => {
+    answerTopics();
+    await writeFile(join(root, 'budget-2026.xlsx'), 'x');
+    const { code, stderr } = await cli(['setup', '--yes', '--folder', root, '--topics']);
+    expect(code).toBe(0);
+    expect(stderr).toContain('100 topics from 1 file names');
+  });
+
+  test('setup --yes alone sends nothing', async () => {
+    answerTopics();
+    await writeFile(join(root, 'a.txt'), 'x');
+    expect((await cli(['setup', '--yes', '--folder', root])).code).toBe(0);
+    expect(requests).toEqual([]);
   });
 });
 
@@ -142,6 +210,7 @@ describe('organize against a stub provider: failures and review', () => {
         response.end(JSON.stringify({ answers: answerAll(body, 0.6) }));
       });
     });
+    await cli(['config', 'set', 'thresholds.apply', '0.85']);
     await cli(['organize', root, '--facets', 'doc-type']);
     const listed = await cli(['review']);
     expect(listed.stdout).toContain('doc-type:invoice (1)');

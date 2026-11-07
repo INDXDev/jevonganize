@@ -75,7 +75,7 @@ that whole class of attack does not exist.
 | --- | --- | --- |
 | `language` | `"system"` | Interface language: PC default, `"en"` (English), `"ja"` (日本語), `"zh-CN"` (简体中文) |
 | `concurrency` | `8` | Maximum parallel model calls |
-| `max_tags` | `10` | Hard cap of tags per file on what organize adds, counting tags a person added |
+| `max_tags` | `10` | Hard cap of tags per file on what organize adds, counting tags a person added but not `entity:` names |
 | `fiscal_year_start` | `4` | First month of the fiscal year, 1 to 12, for `fiscal-year` fields |
 | `exclude` | `["node_modules", ".git", "*.tmp", ".DS_Store", "._*", "Thumbs.db"]` | Globs to skip. Setting it replaces this default, but it adds to the [built-in secret exclusions](security.md#built-in-secret-exclusions), which cannot be turned off |
 | `send_images` | `true` | `false` keeps every image on this machine, including rendered PDF pages. Scanned files then give the model little to work with |
@@ -176,6 +176,16 @@ The model for the chat panel, `ask`, and tag suggestions. Same keys as `[provide
 | `name` | `"openai"` | Provider |
 | `model` | `"gpt-6-luna"` | Model id |
 
+## `[ner]`
+
+The light text model that `organize` uses to read proper names out of files. Same keys as `[provider]`.
+It is separate from `[provider]`, so with a local `[provider]` set this too, or file text goes to OpenAI.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `name` | `"openai"` | Provider |
+| `model` | `"gpt-5.4-mini"` | Model id |
+
 ## `[facets]`
 
 | Key | Default | Meaning |
@@ -189,7 +199,7 @@ Applied after the answer cache, so changing them costs no model calls.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `apply` | `0.85` | At or above: the tag joins the plan. A facet's `apply_above` overrides this |
+| `apply` | `0.5` | At or above: the tag joins the plan. A facet's `apply_above` overrides this |
 | `review` | `0.50` | At or above, and below `apply`: review queue. Below: dropped |
 | `estimated_to_review` | `true` | Answers without native probabilities never join a plan on their own |
 

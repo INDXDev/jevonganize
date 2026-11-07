@@ -34,7 +34,6 @@ export const views = {
     'チャットには設定でAPIキーを追加してください',
     '请在设置中添加 API 密钥以使用聊天',
   ],
-  Add: ['追加', '添加'],
   Id: ['ID', 'ID'],
   'Tags are written as id:label.': [
     'タグは id:label の形式で書き込まれます。',
@@ -128,6 +127,7 @@ export const views = {
     '选择文件以查看其标签和相似文件。',
   ],
   'Reveal in file manager': ['ファイルマネージャーで表示', '在文件管理器中显示'],
+  'Open in default app': ['既定のアプリで開く', '用默认应用打开'],
   'Get a key ↗': ['APIキーを取得 ↗', '获取密钥 ↗'],
   'OpenAI key': ['OpenAIのAPIキー', 'OpenAI 密钥'],
   'OpenAI API key': ['OpenAIのAPIキー', 'OpenAI API 密钥'],
@@ -137,10 +137,59 @@ export const views = {
   ],
   Packs: ['パック', '分类包'],
   'Before you start': ['実行前に', '开始之前'],
-  'It never moves, renames, edits or deletes a file. It only writes tags, and only after you approve a plan.':
+  Topics: ['トピック', '主题'],
+  'Topics apply to every folder. Changing them asks topic again on the next run.': [
+    'トピックは全フォルダー共通です。変更すると次回の実行でtopicを聞き直します。',
+    '主题对所有文件夹生效。更改后，下次运行会重新询问 topic。',
+  ],
+  Names: ['固有名詞', '专有名词'],
+  'Names {count}': ['固有名詞 {count}', '专有名词 {count}'],
+  'Proper name': ['固有名詞', '专有名词'],
+  'All kinds': ['すべての種類', '所有种类'],
+  Person: ['人物', '人物'],
+  Organization: ['組織', '组织'],
+  Place: ['場所', '地点'],
+  Product: ['製品', '产品'],
+  Project: ['プロジェクト', '项目'],
+  Event: ['イベント', '活动'],
+  Add: ['追加', '添加'],
+  'Filter names': ['固有名詞を絞り込む', '筛选专有名词'],
+  'Register {tag}': ['{tag} を登録', '登记 {tag}'],
+  'Unregister {tag}': ['{tag} の登録を解除', '取消登记 {tag}'],
+  'A registered name is looked for in every file on each Organize': [
+    '登録した名前は、整理のたびに全ファイルで探します',
+    '已登记的名称会在每次整理时在所有文件中查找',
+  ],
+  'Remove from every file, and stop offering it': [
+    'すべてのファイルから外し、今後も提案しません',
+    '从所有文件移除，并且不再建议',
+  ],
+  'Organize reads proper names from your files. They appear here.': [
+    '整理を実行すると、ファイルから固有名詞を読み取り、ここに表示します。',
+    '运行整理后，会从文件中读取专有名词并显示在此处。',
+  ],
+  'Tags are written when the run ends, and undo reverses them. Answers are cached, so running the same files again costs nothing.':
     [
-      'ファイルの移動、名前の変更、編集、削除はしません。プランを承認した後に、タグだけを書き込みます。',
-      '不会移动、重命名、编辑或删除文件。只有在你批准计划后，才会写入标签。',
+      '実行が終わるとタグを書き込みます。元に戻すこともできます。回答はキャッシュされるため、同じ内容のファイルを再実行しても費用はかかりません。',
+      '运行结束后写入标签，可以撤销。回答会被缓存，因此再次运行相同文件不产生费用。',
+    ],
+  'Read from the environment.': ['環境変数から読み込みます。', '从环境变量读取。'],
+  'Use OPENAI_API_KEY from the environment': [
+    '環境変数の OPENAI_API_KEY を使う',
+    '使用环境变量 OPENAI_API_KEY',
+  ],
+  'Choose for me': ['おまかせで選ぶ', '帮我选择'],
+  'Choosing…': ['選んでいます…', '正在选择…'],
+  '{count} topics chosen': ['{count}件のトピックを選択中', '已选择 {count} 个主题'],
+  'Pick from 110,000 topics, or leave this to the model: it reads your file names and chooses 100, for about $0.16 at gpt-6-luna prices.':
+    [
+      '11万件のトピックから選べます。選ばなければ、モデルがファイル名を読んで100件を選びます（gpt-6-lunaの料金で約$0.16）。',
+      '可从 11 万个主题中选择。若不选择，模型会读取文件名并选出 100 个（按 gpt-6-luna 价格约 $0.16）。',
+    ],
+  'It never moves, renames, edits or deletes a file. It only writes tags, and every run can be undone.':
+    [
+      'ファイルの移動・名前変更・編集・削除は行いません。書き込むのはタグだけで、どの実行も取り消せます。',
+      '绝不移动、重命名、编辑或删除文件。只写入标签，每次运行都可以撤销。',
     ],
   'Skip for now': ['今はスキップ', '暂时跳过'],
   'All libraries': ['すべてのライブラリ', '所有文件库'],

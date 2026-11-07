@@ -2,7 +2,7 @@
 import { t } from './i18n/index.ts';
 import type { shell } from './i18n/shell.ts';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { act, call, saveView, scanFolder, viewOptions } from './api.ts';
+import { act, call, pickTopics, saveView, scanFolder, viewOptions } from './api.ts';
 import { isDesktop } from './lib.ts';
 import {
   activeTab,
@@ -204,6 +204,14 @@ export const commands: Command[] = [
     },
     group: 'Files',
     run: () => goTo('organize'),
+  },
+  {
+    id: 'pickTopics',
+    get title() {
+      return t('Choose topics for this folder');
+    },
+    group: 'Files',
+    run: () => void pickTopics(parseView(activeTab().query).folder),
   },
   {
     id: 'scan',

@@ -17,7 +17,8 @@ import { patchQuery } from '../view-query.ts';
 const ALL = '__all';
 const SHOWN = 500;
 
-function Rename(props: { tag: string; onClose: () => void; onPlan: (id: string) => void }) {
+/** The dialog for a new tag name. `onPlan` gets the plan it makes. */
+export function Rename(props: { tag: string; onClose: () => void; onPlan: (id: string) => void }) {
   const { tag, onClose, onPlan } = props;
   const [to, setTo] = useState(tag);
   const submit = async () => {

@@ -242,6 +242,42 @@ export const messages = {
   'restore: ': ['復元: ', '恢复：'],
   'Accepted {count} items.': ['{count} 件を承認しました。', '已接受 {count} 项。'],
   'Rejected {count} items.': ['{count} 件を却下しました。', '已拒绝 {count} 项。'],
+  'Stop at the plan, and write no tags': [
+    'plan の作成までで止め、タグは書かない',
+    '只生成计划，不写入标签',
+  ],
+  'Use the built-in topic catalog': ['内蔵のトピックカタログを使う', '使用内置主题目录'],
+  'Let the model choose topics from file names, and add them': [
+    'ファイル名からモデルにトピックを選ばせて追加',
+    '让模型根据文件名选择主题并添加',
+  ],
+  'Print the picks and change nothing': [
+    '選択結果を表示するだけで変更しない',
+    '仅显示选择结果，不做更改',
+  ],
+  'Find topics in the catalog. Free and local': [
+    'カタログからトピックを検索。無料・ローカル処理',
+    '在目录中查找主题，免费且在本地运行',
+  ],
+  'Add catalog topics by hand': ['カタログのトピックを手動で追加', '手动添加目录主题'],
+  'Manage proper names': ['固有名詞を管理', '管理专有名称'],
+  'Register a proper name to look for': ['探す固有名詞を登録', '登记要查找的专有名称'],
+  'Added. The next organize looks for it in every file.': [
+    '追加しました。次の organize で全ファイルから探します。',
+    '已添加。下次 organize 会在所有文件中查找。',
+  ],
+  'Nothing was changed.': ['何も変更していません。', '未做任何更改。'],
+  'Next: jevonganize organize {path}': [
+    '次: jevonganize organize {path}',
+    '下一步：jevonganize organize {path}',
+  ],
+  'Added {count} topics.': ['{count} 件のトピックを追加しました。', '已添加 {count} 个主题。'],
+  '{topics} topics from {files} file names, {tokens} tokens{cost}': [
+    '{files} 件のファイル名から {topics} 件のトピック、{tokens} トークン{cost}',
+    '从 {files} 个文件名得到 {topics} 个主题，{tokens} 个令牌{cost}',
+  ],
+  'Choose topics, even with --yes': ['--yes でもトピックを選ぶ', '即使使用 --yes 也选择主题'],
+  'Skip choosing topics': ['トピックを選ばない', '跳过选择主题'],
   'Added {count} review items:': [
     '確認待ちに {count} 件追加しました:',
     '已添加 {count} 个待审核项：',

@@ -8,7 +8,7 @@
  */
 import type { Answer, Facet, FileState, Tag } from '../types.ts';
 import type { Config } from './config.ts';
-import { FIRST_YEAR, fitTag, LAST_YEAR, slug, tagFacet, tagFor } from './facets.ts';
+import { FIRST_YEAR, fitTag, isName, LAST_YEAR, slug, tagFacet, tagFor } from './facets.ts';
 
 /** An answer as the SDK returns it. */
 export type RawAnswer =
@@ -241,12 +241,10 @@ export function resolve(
 ): { apply: Tag[]; review: { tag: Tag; confidence: number | null }[] } {
   const candidates = gatherCandidates(answers, facets, config.thresholds, tags);
   const ranked = keepBest(candidates).toSorted(byRank);
-  const room = Math.max(config.max_tags - tags.existing.length, 0);
+  const room = Math.max(config.max_tags - tags.existing.filter((tag) => !isName(tag)).length, 0);
+  const applied = ranked.filter((candidate) => candidate.apply).map((candidate) => candidate.tag);
   return {
-    apply: ranked
-      .filter((candidate) => candidate.apply)
-      .slice(0, room)
-      .map((candidate) => candidate.tag),
+    apply: [...applied.filter(isName), ...applied.filter((tag) => !isName(tag)).slice(0, room)],
     review: ranked
       .filter((candidate) => !candidate.apply)
       .map(({ tag, confidence }) => ({ tag, confidence })),

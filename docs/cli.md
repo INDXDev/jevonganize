@@ -38,9 +38,9 @@ files.
 | Command | Tools |
 | --- | --- |
 | `jevonganize` | None. Starts `server/start.ts` |
-| `setup` | `set_api_key`, `add_library`, `list_facets`, `set_enabled`, `scan`, `estimate` |
+| `setup` | `set_api_key`, `add_library`, `list_facets`, `set_enabled`, `scan`, `pick_topics`, `set_vocabulary`, `estimate` |
 | `scan` | `add_library` (for a new path), `scan` |
-| `organize` | `estimate`, `organize`, `apply_plan` (with `--apply`) |
+| `organize` | `estimate`, `organize`, `apply_plan` (unless `--no-apply`) |
 | `plans` | `list_plans` |
 | `apply` | `apply_plan` |
 | `undo` | `undo_plan` |
@@ -52,6 +52,10 @@ files.
 | `similar` | `similar_files` |
 | `review` | `list_reviews`, `resolve_reviews`, `apply_plan` |
 | `suggest` | `suggest_tags` |
+| `topics pick` | `add_library` and `scan` (for a new path), `pick_topics`, `set_vocabulary` |
+| `topics search` | `search_catalog` |
+| `topics add` | `set_vocabulary` |
+| `names add` | `set_vocabulary` |
 | `facets list`, `facets show` | `list_facets` |
 | `facets enable`, `facets disable` | `set_enabled` |
 | `config get` | `get_config` |
@@ -66,8 +70,8 @@ files.
 | `doctor` | `doctor` |
 | `mcp` | Serves every `agent: true` tool. See [llm-native.md](llm-native.md) |
 
-These tools have no command: `status`, `list_libraries`, `list_folders`, `remove_library`, `browse_dirs`,
-`save_facet`, `delete_facet`, `cancel_job`, `reveal_file`, `list_vocabulary`, `set_vocabulary`. Use
+These tools have no command of their own: `status`, `list_libraries`, `list_folders`, `remove_library`,
+`browse_dirs`, `save_facet`, `delete_facet`, `cancel_job`, `reveal_file`, `open_file`, `list_vocabulary`. Use
 the UI. Facets can also be edited as
 files, see [presets.md](presets.md), and Ctrl-C stops a job in the terminal.
 
@@ -110,8 +114,9 @@ http://127.0.0.1:53124/auth?t=2f9c...e81a
 
 ## `jevonganize setup`
 
-Asks for a key, a folder and packs, then scans and shows the cost of a first run. It writes no tags.
-See [getting-started.md](getting-started.md).
+Asks for a key, a folder and packs, then scans. With a key, it also lets the model choose 100 topics
+from the [catalog](presets.md#topic-catalog), reads proper names from the first 200 files and applies
+them as tags, then shows the cost of a first run. See [getting-started.md](getting-started.md).
 
 | Flag | Description |
 | --- | --- |
@@ -119,6 +124,8 @@ See [getting-started.md](getting-started.md).
 | `--folder <path>` | Library to add |
 | `--packs <ids>` | Comma-separated packs to enable |
 | `--yes` | Ask nothing. Needs `--folder`. A key must be stored already or piped to stdin |
+| `--topics` | Choose topics and read names, even with `--yes` |
+| `--no-topics` | Skip choosing topics and reading names, so nothing is sent |
 
 Without `--yes`, it needs a terminal.
 
@@ -147,8 +154,8 @@ Skipped 6 by exclusion rules.
 
 ## `jevonganize organize <path>`
 
-Classifies files in a library and produces a plan. **It always produces a plan, and it writes no tag
-to any file unless you pass `--apply`.** This run does call the model, which costs money and sends
+Classifies files in a library, produces a plan and applies it. **`--no-apply` stops at the plan, and
+`--dry-run` sends nothing.** This run does call the model, which costs money and sends
 [file data](security.md#what-leaves-your-machine) to the provider. The answers are cached, so the
 money is not spent twice.
 
@@ -157,7 +164,7 @@ money is not spent twice.
 | Flag | Description |
 | --- | --- |
 | `--dry-run` | Print the `Estimate` and stop. Needs no key |
-| `--apply` | Apply the plan when it is ready. Items in the review band stay in the queue |
+| `--no-apply` | Stop at the plan and write no tags. By default it applies when ready |
 | `--facets <ids>` | Comma-separated facet ids or packs, replacing the enabled set for this run |
 | `--limit <n>` | Organize at most this many files |
 
@@ -335,6 +342,29 @@ Added 2 review items:
   319  party:acme-corp
 ```
 
+## `jevonganize topics`
+
+```sh
+jevonganize topics pick [path] [--limit <n>] [--dry-run]
+jevonganize topics search <text> [--limit <n>]
+jevonganize topics add <values...>
+```
+
+`topics pick` starts from the current folder by default, and adds and scans it if it is in no library.
+It sends the folder's file names to `[provider]`, asks about every topic in the
+[catalog](presets.md#topic-catalog), and adds the 100 likeliest to `topic` with no further step.
+`--dry-run` prints them and changes nothing. `setup` and the first screen of the UI run this too.
+
+## `jevonganize names add`
+
+```sh
+jevonganize names add organization "Acme Corp"
+```
+
+Registers a proper name. Its kind is `person`, `organization`, `place`, `product`, `project` or
+`event`. The next `organize` asks about it for every file. `organize` also reads names out of files by
+itself, and there is no separate run. The UI's Names screen lists and removes them.
+
 ## `jevonganize facets`
 
 | Command | Description |
@@ -442,4 +472,4 @@ this command, so you rarely run it yourself. See [llm-native.md](llm-native.md#m
 
 | Flag | Description |
 | --- | --- |
-| `--allow-apply` | Let `apply_plan`, `undo_plan`, `organize` and `suggest_tags` run with no person. Off by default |
+| `--allow-apply` | Let `apply_plan`, `undo_plan`, `organize`, `suggest_tags` and `pick_topics` run with no person. Off by default |

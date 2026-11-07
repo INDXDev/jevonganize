@@ -1,10 +1,18 @@
 import { t } from '../i18n/index.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Job, Library, Status } from '../../types.ts';
-import { call, organize as startOrganize, queryClient, useTool } from '../api.ts';
+import {
+  addTopics,
+  call,
+  chooseTopics,
+  organize as startOrganize,
+  queryClient,
+  useTool,
+} from '../api.ts';
 import { Block } from '../components/block.tsx';
 import { FolderPicker } from '../components/folder-picker.tsx';
 import { useTabs, useWindow } from '../tabs.ts';
+import { patchQuery } from '../view-query.ts';
 import {
   CostStep,
   FIRST_RUN,
@@ -13,6 +21,7 @@ import {
   KeyStep,
   PacksStep,
   StartBar,
+  TopicsStep,
 } from './onboarding-steps.tsx';
 
 type Guard = (run: () => Promise<unknown>) => Promise<void>;
@@ -40,7 +49,24 @@ function useApiKey(status: Status | undefined, guard: Guard) {
       setKey('');
       setKeySaved(true);
     });
-  return { key, setKey, saveKey, haveKey: keySaved || !!status?.has_key };
+  // Keys in the environment wait for consent. This button is that consent.
+  const { data: keys } = useTool('list_keys', {});
+  const openai = keys?.keys.find((row) => row.provider === 'openai');
+  const adoptEnvKey = () =>
+    guard(async () => {
+      await call('set_env_keys', { allowed: true });
+      await queryClient.invalidateQueries({ queryKey: ['list_keys'] });
+      setKeySaved(true);
+    });
+  return {
+    key,
+    setKey,
+    saveKey,
+    inEnv: openai?.in_env === true,
+    fromEnv: openai?.source === 'env',
+    adoptEnvKey,
+    haveKey: keySaved || !!status?.has_key,
+  };
 }
 
 function useFolderChoice(guard: Guard) {
@@ -71,12 +97,15 @@ function usePacks(guard: Guard) {
   return { packs, togglePack };
 }
 
-/** The run itself: its scope and estimates, the Enter focus, and the move to Review when it ends. */
+/** The first run: topics from the catalog, organize, then proper names, with nothing to approve. */
 function useFirstRun(input: { library?: Library; usable: boolean; status?: Status; guard: Guard }) {
   const { library, usable, status, guard } = input;
   const navigate = useTabs((s) => s.navigate);
   const [coverAll, setCoverAll] = useState(false);
   const [jobId, setJobId] = useState<string>();
+  const [picking, setPicking] = useState(false);
+  // Unset until a person or the model has chosen, so Organize knows to choose. Empty is a choice.
+  const [topics, setTopics] = useState<string[]>();
 
   const query = { folder: library?.path, limit: coverAll ? undefined : FIRST_RUN };
   const { data: estimate } = useTool('estimate', { query }, { enabled: usable });
@@ -97,23 +126,47 @@ function useFirstRun(input: { library?: Library; usable: boolean; status?: Statu
   useEffect(() => {
     if (job?.status !== 'done') return;
     useWindow.setState({ skipped: true });
-    navigate('screen=review');
-  }, [job?.status, navigate]);
+    navigate(patchQuery('', { screen: 'names', folder: library?.path }));
+  }, [job?.status, navigate, library?.path]);
+
+  const choose = async () => {
+    setPicking(true);
+    try {
+      const chosen = await chooseTopics(library?.path);
+      setTopics((now) => [...new Set([...(now ?? []), ...chosen])]);
+      return chosen;
+    } finally {
+      setPicking(false);
+    }
+  };
 
   const startRun = () =>
     guard(async () => {
-      setJobId((await startOrganize({ query }, false)).id);
+      await addTopics(topics ?? (await choose()));
+      setJobId((await startOrganize({ query }, true)).id);
     });
 
-  return { coverAll, setCoverAll, estimate, wholeFolder, job, startRef, startRun };
+  return {
+    coverAll,
+    setCoverAll,
+    estimate,
+    wholeFolder,
+    job,
+    picking,
+    topics: topics ?? [],
+    setTopics,
+    choose: () => guard(choose),
+    startRef,
+    startRun,
+  };
 }
 
-/** The first screen: key, folder, packs, then a cost notice. Nothing is tagged until a plan is approved. */
+/** The first screen: key, folder, packs, topics, then a cost notice. Starting the run writes tags, which undo reverses. */
 export function Onboarding() {
   const navigate = useTabs((s) => s.navigate);
   const { data: status } = useTool('status', {});
   const { error, guard } = useGuard();
-  const { key, setKey, saveKey, haveKey } = useApiKey(status, guard);
+  const { key, setKey, saveKey, inEnv, fromEnv, adoptEnvKey, haveKey } = useApiKey(status, guard);
   const { library, picking, setPicking, pick, usable } = useFolderChoice(guard);
   const { packs, togglePack } = usePacks(guard);
   const run = useFirstRun({ library, usable, status, guard });
@@ -136,12 +189,28 @@ export function Onboarding() {
               value={key}
               onChange={setKey}
               onSave={() => void saveKey()}
+              inEnv={inEnv}
+              fromEnv={fromEnv}
+              onUseEnv={() => void adoptEnvKey()}
             />
-            <FolderStep library={library} usable={usable} onChoose={() => setPicking(true)} />
+            <FolderStep
+              library={library}
+              files={run.wholeFolder?.files}
+              usable={usable}
+              onChoose={() => setPicking(true)}
+            />
             <PacksStep
               usable={usable}
               packs={packs}
               onToggle={(id, enabled) => void togglePack(id, enabled)}
+            />
+            <TopicsStep
+              usable={usable}
+              canChoose={haveKey && !run.job}
+              picking={run.picking}
+              topics={run.topics}
+              onChange={run.setTopics}
+              onChoose={() => void run.choose()}
             />
             <CostStep
               usable={usable}
@@ -157,7 +226,7 @@ export function Onboarding() {
           {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
           <StartBar
             startRef={run.startRef}
-            canStart={usable && haveKey && !run.job}
+            canStart={usable && haveKey && !run.job && !run.picking}
             onSkip={skip}
             onStart={() => void run.startRun()}
           />

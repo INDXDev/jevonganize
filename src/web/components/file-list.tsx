@@ -2,6 +2,7 @@ import { t } from '../i18n/index.ts';
 import type { VirtualItem } from '@tanstack/react-virtual';
 import { useRef, type MouseEvent, type ReactNode } from 'react';
 import type { FileQuery, FileRow } from '../../types.ts';
+import { act } from '../api.ts';
 import { cn } from '../lib.ts';
 import { useWindow } from '../tabs.ts';
 import {
@@ -95,8 +96,7 @@ type CellView = Metrics & {
   picked: (id: number) => boolean;
   rowAt: RowAt;
   onClick: (e: MouseEvent, i: number, row: FileRow) => void;
-  /** Nothing opens a file in its own app, so a double click stops at the preview. */
-  onDoubleClick?: () => void;
+  onDoubleClick?: (id: number) => void;
   onFocus: (index: number) => void;
 };
 
@@ -113,7 +113,7 @@ function FileCell({ index, view }: { index: number; view: CellView }) {
     'aria-selected': on || active,
     'aria-colindex': grid ? (index % columns) + 1 : 1,
     onClick: (e: MouseEvent) => view.onClick(e, index, row),
-    onDoubleClick: view.onDoubleClick,
+    onDoubleClick: () => view.onDoubleClick?.(row.id),
     onFocus: () => view.onFocus(index),
   };
   const item = { row, on, active, shared, options };
@@ -166,7 +166,7 @@ function VirtualList(props: Props & { query: FileQuery }) {
   const focusNextCursor = useCursorFocus(root, cursor);
   const scrollToRow = (row: number) => virtual.scrollToIndex(row);
   const input = { rowAt, cursor, setCursor, focusNextCursor, total, columns, scrollToRow };
-  const { click, preview } = useListInput({ ...input, keyboard, onOpen, onCursor });
+  const { click } = useListInput({ ...input, keyboard, onOpen, onCursor });
 
   if (first.error)
     return <p className="p-6 text-center text-sm text-destructive">{first.error.message}</p>;
@@ -185,7 +185,7 @@ function VirtualList(props: Props & { query: FileQuery }) {
     picked: (id) => selection.all || selection.ids.has(id),
     rowAt,
     onClick: click,
-    onDoubleClick: keyboard ? preview : undefined,
+    onDoubleClick: keyboard ? (id) => void act('open_file', { id }) : undefined,
     onFocus: setCursor,
   };
   return (

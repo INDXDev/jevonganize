@@ -3,6 +3,7 @@ import { keepWorkersWarm } from '../extract/index.ts';
 import type { ToolMap, ToolName } from '../types.ts';
 import { loadConfig, parseWith, UserError } from './config.ts';
 import { openDb } from './db.ts';
+import { catalogTools } from './tools/catalog.ts';
 import { facetTools } from './tools/facets.ts';
 import { fileTools } from './tools/files.ts';
 import { libraryTools } from './tools/libraries.ts';
@@ -20,6 +21,7 @@ export const tools: ToolTable = {
   ...libraryTools,
   ...fileTools,
   ...facetTools,
+  ...catalogTools,
   ...planTools,
   ...reviewTools,
   ...settingsTools,

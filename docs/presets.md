@@ -1,7 +1,7 @@
 # Presets
 
-A facet is one attribute of a file. A preset is a facet that ships with Jevonganize. There are 100, in
-10 packs. Custom facets use the same format.
+A facet is one attribute of a file. A preset is a facet that ships with Jevonganize. There are 102, in
+11 packs. Custom facets use the same format. A separate [topic catalog](#topic-catalog) ships with them.
 
 ```toml
 [facets]
@@ -255,14 +255,15 @@ is `FY2025` and April 2026 is `FY2026`.
 | `has-trade-secret` | `flag` | Unpublished business or technical secrets |
 | `has-legal-privilege` | `flag` | Advice from a lawyer to a client |
 
-All of these use `weight = 0.25` and `apply_above = 0.95`.
+All of these use `weight = 0.25`. They apply at the same threshold as any facet, so a wrong guess is
+written. Set `apply_above` in a custom copy to hold them back.
 
 **No preset claims a file is safe.** There is no `not-sensitive` and no `safe-to-delete`, because a
 hostile file could give itself that tag. The lowest step of `confidentiality` is `none`, which writes no
 tag, so nothing is claimed when nothing showed.
 
 `visibility:public` says what the file appears to be, not that sharing it is harmless. A hostile file
-can give itself that tag too, so like the rest of this pack it needs `0.95` to apply, and it must not
+can give itself that tag too, so it must not
 be used as a security control. Files neither public nor private get no tag.
 
 A tag such as `flag:has-credentials` is visible to anyone who can read the file's attributes. It also
@@ -405,7 +406,7 @@ it cannot break the grammar.
 
 ```toml
 [thresholds]
-apply = 0.85
+apply = 0.5
 review = 0.50
 estimated_to_review = true
 ```
@@ -431,8 +432,7 @@ the plan's `remove`: that includes an answer of `other`, or a `level` of `none`.
 either way, so a refused facet keeps its tags, which then count as `existing`. A human tag always beats an answer: if you tagged a file `doc-type:invoice`, the
 model cannot add `doc-type:receipt`.
 
-**Sensitivity is biased towards review.** A wrong "sensitive" tag is cheap, and a wrong silent one is
-not. With `apply_above = 0.95`, answers from 0.50 to below 0.95 wait for a person.
+**Sensitivity gets no special treatment.** Its answers apply at `thresholds.apply` like any other.
 
 **The defaults are assumptions.** They come from no measurement, and do not transfer between models.
 To set them well, label 100 to 200 of your own files and pick per-facet values with `apply_above`.
@@ -445,7 +445,7 @@ maximum of six is appropriate", and "do not assign more than ten".
 
 - **The aim** is met by choosing packs. Nothing enforces it.
 - **The cap** is `max_tags`, and it counts tags a person added. It binds what organize adds, not a
-  plan a person writes by hand or a review item they accept.
+  plan a person writes by hand or a review item they accept. `entity:` tags do not count.
 - **Each `multi`** keeps its top 3 labels.
 
 If a file would go over the cap, candidates are ranked by facet `weight`, then by confidence, then by
@@ -456,12 +456,14 @@ and refuses an op that a person's later tags pushed over it.
 
 ## Open facets
 
-`topic`, `party` and `project` are open: they can gain values. They are the only presets that are.
+`topic`, `party`, `project` and `entity` are open: they can gain values. They are the only presets
+that are.
 A decision model cannot invent a label, so a chat model suggests and a person decides. This keeps
 principle 5, closed output: an unreviewed model string never reaches a tag.
 
-`topic` ships with seed values, such as `finance` and `finance/tax`. `party` and `project` start
-empty, and ask nothing until they have a value.
+`topic` ships with seed values, such as `finance` and `finance/tax`. The others start empty, and ask
+nothing until they have a value. `entity` normally stays empty: `names` writes its tags directly, so
+each new name does not become one more question for every file.
 
 | State | Meaning | On disk? | Asked? |
 | --- | --- | --- | --- |
@@ -482,6 +484,55 @@ one-file tags and tags on over half of all files.
 
 **This has a cost.** A new active value changes the facet's hash, so the next organize asks that whole
 facet again for every file in scope. Accept in batches, and check `estimate` first.
+
+## Topic catalog
+
+`presets/catalog.txt` holds subjects as `<domain>/<concept>`, such as `finance/budgeting`. They are not
+facets, so nothing asks about them until one joins `topic`. Most domains are `topic` seeds, so
+`topic:finance` also finds `topic:finance/budgeting`, and the domain tells `nature/python` from
+`technology/python`.
+
+`jevonganize topics pick` chooses for a folder, with no review:
+
+1. It takes the folder's file names, sampled evenly down to `budget.text_chars`. No content and no paths.
+2. **Sweep.** Every catalog value competes, in choice questions of 254 options, 8 to a request. No tree
+   is walked, so a wrong early branch cannot hide a good topic.
+3. **Confirm.** The 1,000 values with the best odds each get a yes-or-no question, which turns down
+   anything that fits almost any folder.
+4. The 100 likeliest at 0.5 or above become active values of `topic`, leaving out values already
+   active or retired. A model only selects, so this keeps closed output.
+
+Choice questions carry the sweep because a question costs about 155 tokens before its text, measured
+on `gpt-6-luna` on 2026-11-07. Across about 110,000 topics on 12 file names, a yes-or-no question each
+took 19.6M tokens, $1.97 and 40 seconds, and its top picks were vague, such as
+`language/human-written-text`. The sweep took 1.4M tokens, $0.14 and 4 seconds, and its top picks were
+concrete, such as `finance/invoices`. With the confirm step, a whole run took 1.6M tokens, $0.16 and 8
+seconds. The file names are billed once per request, not per question.
+
+The vocabulary is global, because there is no per-folder config. Each added value is one more question
+for every file organized, and changes `topic`'s hash, so the next organize asks `topic` again.
+
+Names come from Wikipedia's Vital Articles level 4 (CC BY-SA 4.0), IPTC Media Topics (CC BY 4.0) and
+OpenAlex (CC0), with everyday subjects added by `gpt-5.4-mini`, which also filed every name under a
+domain. Those filings are a model's, so some are wrong. `scripts/catalog.ts` rebuilds the file.
+
+## Proper names
+
+Every `organize` run also tags files with the names they contain. There is no separate run:
+
+1. The `has-proper-names` flag asks the decision model whether a file names specific things. Its
+   answer is cached like any other.
+2. Only files it passes go to the `[ner]` model, which lists names with a kind: `person`,
+   `organization`, `place`, `product`, `project` or `event`.
+3. A name the file does not literally contain is dropped, and so is one found only in the file's own
+   name.
+4. The rest become `entity:<kind>/<name>` in the run's plan, at most 8 per file. They sit outside
+   `max_tags`, so a full file still gets them, and a run never replaces them. There is no review
+   step. `undo` reverses it.
+
+A name you register, with `jevonganize names add` or on the Names screen, joins `entity`, so the same
+run asks about it for every file. Without a `[ner]` key, a run reads no names and asks only about
+registered ones.
 
 ## Re-tagging
 

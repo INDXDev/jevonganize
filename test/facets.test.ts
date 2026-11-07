@@ -56,7 +56,7 @@ describe('loadFacets', () => {
     custom('home.toml', good);
     const facets = await loadFacets(config);
     expect(facets.find((facet) => facet.id === 'doc-type')?.title).toBe('Mine');
-    expect(facets).toHaveLength(100);
+    expect(facets).toHaveLength(102);
   });
 
   test('a bad file warns and leaves the others alone', async () => {
@@ -88,7 +88,7 @@ describe('loadFacets', () => {
     const facets = await loadFacets(config, (message) => warnings.push(message));
     expect(warnings).toHaveLength(1);
     expect(facets.some((facet) => facet.id === 'fine')).toBe(true);
-    expect(facets).toHaveLength(101);
+    expect(facets).toHaveLength(103);
   });
 
   test('a duplicate id in one folder is skipped', async () => {

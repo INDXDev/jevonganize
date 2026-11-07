@@ -204,8 +204,9 @@ belong to the window. `limit` and `offset` are not in it either: the virtual lis
 
 ## Onboarding
 
-Shown when `status` reports no libraries. One screen with steps that open in order. Nothing is
-written to a file until the last step, and only then by approving a plan.
+Shown when `status` reports no libraries. One screen with steps that open in order. Nothing is sent or
+written until "Choose for me" or "Organize". "Organize" adds the chosen topics, or runs `pick_topics` for 100 if
+none were chosen, organizes and applies, and reads proper names and applies them, with no approval. Each plan can be undone.
 
 ```text
 ┌───────────────────────────────────────────────────────────────────┐
@@ -219,7 +220,11 @@ written to a file until the last step, and only then by approving a plan.
 │                     └──────────────────────────┘                  │
 │  3 Packs            ☑ Core  ☑ Time  ☑ Sensitivity  ☑ Media  more… │
 │                                                                   │
-│  4 Before you start                                               │
+│  4 Topics                                                         │
+│    [ Search topic catalog        ]  [ Choose for me ]             │
+│    finance  work  legal  health  travel  housing  family  hobbies │
+│                                                                   │
+│  5 Before you start                                               │
 │    Sent to OpenAI for each file: its name, up to 8,000 characters │
 │    of text, up to 2 images, and metadata. Nothing else.           │
 │    First 200 files · 9 facets · 0.7M tokens · about $0.07         │
@@ -231,12 +236,13 @@ written to a file until the last step, and only then by approving a plan.
 
 | Step | Tools | Notes |
 | --- | --- | --- |
-| Key | `set_api_key` | The key field is `type=password`. It is never shown again. A rejected key shows up on the first model call, and the job stops at step 5 with the provider's message |
-| Folder | `browse_dirs`, `add_library`, `scan` | A folder on a volume with `taggable: false` shows a warning and cannot be used. See [troubleshooting.md](troubleshooting.md#volume-unsupported) |
+| Key | `set_api_key`, `list_keys`, `set_env_keys` | With `OPENAI_API_KEY` set, a button uses it, and that click is the consent. The key field is `type=password`. It is never shown again. A rejected key shows up on the first model call, and the job stops at step 5 with the provider's message |
+| Folder | `browse_dirs`, `add_library`, `scan` | The picker works like a Finder list: places, back and forward, a path bar, sorting by name, date or size, a filter and hidden items. Double-click or Right enters a folder. Files show dimmed, and links are never entered. A folder on a volume with `taggable: false` shows a warning and cannot be used. See [troubleshooting.md](troubleshooting.md#volume-unsupported) |
 | Packs | `list_facets`, `set_enabled` | Defaults come from `facets.enabled` |
+| Topics | `search_catalog`, `pick_topics`, `set_vocabulary` | Searching is local and free. A domain chip fills the search. "Choose for me" sends file names and shows the 100 picks here, each removable. Nothing joins `topic` until Organize. With nothing chosen, Organize chooses first |
 | Cost | `estimate` | The notice names the real provider and model, and takes its numbers from `[budget]`. `cost_usd: null` shows "cost unknown" |
 | Organize | `organize` | Limit 200 by default, so a first run ends quickly. Progress shows as a [block](#blocks) |
-| Review, apply | `list_reviews`, `apply_plan` | Opens `screen=review`, with the new plan on top |
+| Apply | `apply_plan` | Applies the plan, and opens [Names](#names) with what the run found |
 
 "Skip for now" opens the browser. Scan and search work with no key. Organize refuses, as anywhere.
 
@@ -280,7 +286,7 @@ holds Scan, which updates the library this folder is in, and Organize, which ope
 
 **File list.** Rows come from `search_files`. Grid and list are the same [`FileList`](#component-rules).
 Sorting happens in SQLite, never in the browser, by name, kind, date or size. A list row shows at most
-three tag chips, then `+N`. A double click opens the quick preview: nothing opens a file in its own app.
+three tag chips, then `+N`. A double click opens the file in its default app, unless it is [an executable](security.md#opening-a-file). `Space` is the quick preview.
 
 **Subfolders.** With a folder open, the folders directly under it sit above the list, from
 `list_folders`. Clicking one goes in, and the path above the list goes back up.
@@ -296,7 +302,7 @@ A file on a volume that cannot store tags shows no tag actions anywhere.
 | Section | Content |
 | --- | --- |
 | Preview | See [File previews](#file-previews) |
-| Facts | Kind, size, modified, path with a Reveal action (`reveal_file`) |
+| Facts | Kind, size, modified, path with a Reveal action (`reveal_file`). The header has Open (`open_file`) and Reveal |
 | Tags | Every tag as a chip. `+` adds and `×` removes, through `propose_changes` and `apply_plan`. A single-file change applies at once, because the person made it directly. The spark calls `suggest_tags`, which sends this file to the provider, and its results appear under Pending |
 | Pending | The file's `reviews`, with accept and reject |
 | Metadata | `metadata` as a key and value table, collapsed |
@@ -309,6 +315,21 @@ counts.
 
 A "Select all" acts on the query, not on ids. It sends `query` to `propose_changes`, so it works
 across files that were never loaded.
+
+## Names
+
+`screen=names`, key `n`. Proper names, apart from other tags. It lists `entity` tags in scope and the
+active values of `entity`, by count, with a kind filter and a text filter.
+
+| Control | Tool | Effect |
+| --- | --- | --- |
+| Add | `set_vocabulary` | Registers a name. Each organize then asks about it for every file |
+| Pin | `set_vocabulary` | Registers a name found in a file, or unregisters one |
+| Show files | | Opens the files in a new tab |
+| Rename | `rename_tag`, `apply_plan` | Renames or merges a name |
+| Remove | `propose_changes`, `apply_plan`, `set_vocabulary` | Takes it off its files and retires it, so it is not offered again. Undo restores the tags |
+
+There is no run of its own. Names come from `organize`.
 
 ## Organize
 
@@ -331,13 +352,17 @@ tab's own query, so filters set in Files carry over, and nothing is sent until O
 └────────────────────────────────────┴───────────────────────────────┘
 ```
 
+Under Facets, **Topics** lists the active values of `topic`. Adding one from the catalog activates it,
+removing one retires it, and "Choose for me" runs `pick_topics`. Proper names need no control here:
+every run reads them. See [Names](#names).
+
 | CLI | Control | Tool |
 | --- | --- | --- |
 | `<path>`, query flags | Folder and the [filter bar](#browser) | `FileQuery` |
 | `--limit` | Limit | `FileQuery.limit` |
 | `--facets` | Facets. Ticks start on the enabled facets and hold for this run only | `facets` |
 | `--dry-run` | Always on: the estimate updates as the controls change | `estimate` |
-| `--apply` | Apply when ready | `apply_plan`, once the job ends |
+| `--no-apply` | Apply when ready, on by default | `apply_plan`, once the job ends |
 | Ctrl-C | Cancel on the block | `cancel_job` |
 
 - The numbers in the notice come from `[budget]` and `send_images`. Onboarding uses the same
@@ -399,7 +424,9 @@ Grouped by tag, so one decision can cover many files. `screen=review`.
 
 ## Facets editor
 
-`screen=facets`. Packs on the left, the facet form in the middle, a sample result on the right.
+`screen=facets`. Packs on the left, the facet form in the middle, a sample result on the right. Above
+the packs, a search box calls `search_catalog`, and clicking a result adds it to `topic`. The palette
+offers "Choose topics for this folder" (`pick_topics`).
 
 ```text
 ┌ Facets ──────────────────────────────────────────────── [+ New] ──┐
@@ -445,7 +472,7 @@ config key needs no UI code.
 ┌ Settings ─────────────────────────────────────── ⌕ Filter… ───────┐
 ├──────────────┬────────────────────────────────────────────────────┤
 │ ▸ General    │ THRESHOLDS                                         │
-│   Provider   │ Apply                 [ 0.85 ]                     │
+│   Provider   │ Apply                 [ 0.50 ]                     │
 │   Chat       │   At or above: joins the plan                      │
 │   Facets     │ Review                [ 0.50 ]                     │
 │   Thresholds │ Estimated to review   [■]                          │

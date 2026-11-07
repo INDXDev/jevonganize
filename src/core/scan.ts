@@ -1,10 +1,16 @@
 /**
- * Keeps the index in step with the disk: walk, compare fingerprints, mirror tags. The disk always
- * wins. A fingerprint is what `lstat` says about a path, so an unchanged one needs no further read.
- * A row is a file the index knows; `seen` collects rows the walk found, and the rest are gone.
+ * Keeps the index in step with the disk. The disk always wins, and a scan writes only to the index.
  *
- * A scan reads tags and writes only to the index, in batches, as a transaction must not span an
- * `await`: each batch reads the disk first, then records every change at once.
+ * A row is a file the index knows. A fingerprint is what `lstat` says about a path, so a file whose
+ * fingerprint matches its row needs no further read. A scan walks a library and takes its paths in
+ * batches, because a transaction must not span an `await`. Each batch has three steps:
+ *
+ * 1. `prefetch` runs `lstat` on every path and starts reading the tags of those that look changed.
+ * 2. `detectChanges` compares each path with its row, and marks the row as seen.
+ * 3. `recordChanges` writes every difference to the index in one transaction.
+ *
+ * Once the walk ends, `dropMissingRows` deletes the rows that were not seen. The file reads from top
+ * to bottom: the entry points first, then the walk, the three steps, and the helpers they share.
  */
 import { lstat, readdir, realpath, stat } from 'node:fs/promises';
 import type { BigIntStats, Dirent } from 'node:fs';
@@ -16,6 +22,7 @@ import type { Config } from './config.ts';
 import { ifExists, UserError } from './config.ts';
 import type { Db, FileRecord, Fingerprint, MirrorTag } from './db.ts';
 import { type Excluded, exclusions, secretRoot } from './exclusions.ts';
+import { contentLooksSame, fingerprint, sameFingerprint } from './fingerprint.ts';
 import { overwriteDropsTags } from './tags.ts';
 import { readScanTags, type TagRead } from './tag-reader.ts';
 
@@ -38,8 +45,12 @@ export interface ScanResult {
   ids: number[];
 }
 
-/** What one scan has learned so far, shared by its walk and its batches. */
+/** Reports how far a scan has got. */
+type OnProgress = (progress: { done: number; current: string }) => void;
+
+/** One scan: the index it updates and what it has learned so far. */
 interface ScanPass {
+  db: Db;
   result: ScanResult;
   /** Ids of the rows whose file was found. */
   seen: Set<number>;
@@ -49,10 +60,111 @@ interface ScanPass {
   writes: number;
 }
 
-/** Reports how far a scan has got. */
-type OnProgress = (progress: { done: number; current: string }) => void;
+/** A path and what `lstat` said: nothing for a file that is gone, or why it could not say. */
+interface PathStats {
+  path: string;
+  stats: BigIntStats | undefined | Error;
+}
 
-const startPass = (): ScanPass => ({
+/** A batch on its way in: its `lstat`s, the rows they were compared with, and tag reads under way. */
+interface Prefetched {
+  pathStats: PathStats[];
+  rowsByPath: Map<string, FileRecord>;
+  /** `ScanPass.writes` when the rows were read. */
+  writes: number;
+  tagReads: Promise<TagRead[]>;
+}
+
+/** A file that differs from the index. `prior` is unset for a file the index has not met. */
+interface Change {
+  onDisk: Fingerprint;
+  prior: FileRecord | undefined;
+}
+
+/**
+ * Brings the index up to date with one library, and repairs any drift. Never writes to a file.
+ * Similarity numbers are left to the caller, once for all its libraries.
+ */
+// shortcut: renaming a file and creating a new one at its old path raises false `restore` items,
+// which cost a click. Match inodes in a second pass if that proves common.
+export async function scanLibrary(
+  db: Db,
+  config: Config,
+  libraryPath: string,
+  onProgress?: OnProgress,
+): Promise<ScanResult> {
+  const root = resolve(libraryPath);
+  const rootStats = await ifExists(stat(root));
+  // Going on would read an unplugged drive as every file deleted, losing provenance and history.
+  if (!rootStats?.isDirectory()) throw new UserError(`${root} is not a folder that can be read`);
+
+  // A stored root can be, or become, a link to a secret folder.
+  const rootIsSecret = secretRoot(config, await realpath(root));
+  const excluded = rootIsSecret ? () => true : exclusions(config, root);
+  const pass = startPass(db);
+  await walkAndIndex(root, excluded, pass, onProgress);
+  const { result } = pass;
+
+  const indexed = db.filesUnder(root);
+  // An empty mount point looks like every file deleted, and the rows hold provenance and history.
+  // shortcut: a folder a person really emptied keeps its rows too, until `remove_library`.
+  const mayBeUnplugged = result.files === 0 && indexed.length > 0;
+  if (mayBeUnplugged) {
+    result.warnings.push(
+      `${root} has no files, but ${indexed.length} are indexed. Keeping them, in case a drive is unplugged`,
+    );
+    return result;
+  }
+  dropMissingRows(indexed, pass);
+  db.markScanned(root);
+  return result;
+}
+
+/**
+ * Stats and compares only these paths, for `watch`. `needsWalk` is true when one was a directory or
+ * a vanished indexed path: that can be a move, and only a full scan can tell a move from a delete.
+ */
+export async function scanPaths(
+  db: Db,
+  config: Config,
+  libraryPath: string,
+  candidates: string[],
+): Promise<{ ids: number[]; needsWalk: boolean; warnings: string[] }> {
+  const excluded = exclusions(config, resolve(libraryPath));
+  const pass = startPass(db);
+  const { gone, files, hasDirectory } = await classifyCandidates(candidates, excluded);
+  for await (const batch of batchesOf(files)) await scanBatch(await prefetch(batch, pass), pass);
+  // After the files, so a rename seen whole in this batch has already moved its row.
+  const isIndexed = (path: string) => db.fileByPath(path) || db.filesUnder(path).length > 0;
+  const needsWalk = hasDirectory || gone.some(isIndexed);
+  return { ids: pass.result.ids, needsWalk, warnings: pass.result.warnings };
+}
+
+/**
+ * Stores a file's fingerprint straight after the app wrote its tags, so the scan and the watcher
+ * do not take the moved ctime for an outside change.
+ */
+export async function recordWrite(db: Db, path: string): Promise<void> {
+  const stats = await lstat(path, { bigint: true });
+  db.upsertFile(fingerprint(path, stats), { edited: false });
+}
+
+/** Handles tags gone from a file, as in docs/tags.md#lost-tags. Returns the new `restore` items. */
+export function recordRemoved(db: Db, id: number, removed: MirrorTag[], replaced: boolean): number {
+  if (!replaced) {
+    for (const { tag, ai } of removed) if (ai) db.rejectTag(id, tag, 'Removed by a person');
+    return 0;
+  }
+  let restores = 0;
+  for (const { tag } of removed) {
+    const item = { file_id: id, kind: 'restore', tag, confidence: null } as const;
+    if (db.addReview({ ...item, reason: 'Missing after the file was replaced' })) restores++;
+  }
+  return restores;
+}
+
+const startPass = (db: Db): ScanPass => ({
+  db,
   result: {
     files: 0,
     added: 0,
@@ -69,15 +181,37 @@ const startPass = (): ScanPass => ({
   writes: 0,
 });
 
-/** Lists a folder. One that cannot be read lists as empty, and is noted in the pass. */
-async function listFolder(dir: string, pass: ScanPass): Promise<Dirent[]> {
-  try {
-    return await readdir(dir, { withFileTypes: true });
-  } catch (error) {
-    pass.unreadable.push(dir);
-    pass.result.warnings.push(`Could not read ${dir}: ${(error as NodeJS.ErrnoException).code}`);
-    return [];
+/** Walks a library and indexes what it finds. Each batch's disk reads overlap the one before it. */
+async function walkAndIndex(
+  root: string,
+  excluded: Excluded,
+  pass: ScanPass,
+  onProgress?: OnProgress,
+) {
+  const scanAndReport = async (prefetched: Prefetched) => {
+    await scanBatch(prefetched, pass);
+    onProgress?.({ done: pass.result.files, current: prefetched.pathStats.at(-1)!.path });
+  };
+  let waiting: Prefetched | undefined;
+  for await (const batch of batchesOf(walk(root, excluded, pass))) {
+    const next = await prefetch(batch, pass);
+    if (waiting) await scanAndReport(waiting);
+    waiting = next;
   }
+  if (waiting) await scanAndReport(waiting);
+}
+
+/** Groups paths into batches, none of them empty. */
+async function* batchesOf(paths: Iterable<string> | AsyncIterable<string>) {
+  let batch: string[] = [];
+  for await (const path of paths) {
+    batch.push(path);
+    if (batch.length === BATCH_SIZE) {
+      yield batch;
+      batch = [];
+    }
+  }
+  if (batch.length) yield batch;
 }
 
 /** Yields regular files, one directory at a time. Links and special files are never opened. */
@@ -97,28 +231,91 @@ async function* walk(dir: string, excluded: Excluded, pass: ScanPass): AsyncGene
   }
 }
 
-const fingerprint = (path: string, info: BigIntStats): Fingerprint => ({
+/** Lists a folder. One that cannot be read lists as empty, and is noted in the pass. */
+async function listFolder(dir: string, pass: ScanPass): Promise<Dirent[]> {
+  try {
+    return await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    pass.unreadable.push(dir);
+    pass.result.warnings.push(`Could not read ${dir}: ${(error as NodeJS.ErrnoException).code}`);
+    return [];
+  }
+}
+
+/**
+ * Starts a batch's disk reads, so the tag worker runs during the previous batch's transaction. The
+ * rows here may be one batch old, which is fine for guessing what to read: `detectChanges` decides
+ * what a path is from the rows as they stand then, and `withMissedReads` reads whatever this missed.
+ */
+async function prefetch(batch: string[], pass: ScanPass): Promise<Prefetched> {
+  const rowsByPath = rowsOf(pass.db, batch);
+  const { writes } = pass;
+  const pathStats = await Promise.all(batch.map(lstatPath));
+  const looksChanged = ({ path, stats }: PathStats) => {
+    if (!stats || stats instanceof Error || !stats.isFile()) return false;
+    const row = rowsByPath.get(path);
+    return !row || !sameFingerprint(row, fingerprint(path, stats));
+  };
+  const changedPaths = pathStats.filter(looksChanged).map(({ path }) => path);
+  return { pathStats, rowsByPath, writes, tagReads: readScanTags(changedPaths) };
+}
+
+const rowsOf = (db: Db, paths: string[]) =>
+  new Map(db.filesByPaths(paths).map((row) => [row.path, row]));
+
+const lstatPath = async (path: string): Promise<PathStats> => ({
   path,
-  dev: String(info.dev),
-  ino: String(info.ino),
-  size: Number(info.size),
-  mtime_ns: String(info.mtimeNs),
-  ctime_ns: String(info.ctimeNs),
+  stats: await ifExists(lstat(path, { bigint: true })).catch((error: Error) => error),
 });
 
-/** Judged from the fingerprint alone: the content itself is never read here. */
-const contentLooksSame = (row: FileRecord, onDisk: Fingerprint) =>
-  row.ino === onDisk.ino && row.size === onDisk.size && row.mtime_ns === onDisk.mtime_ns;
+/** Takes one prefetched batch through to the index. */
+async function scanBatch(prefetched: Prefetched, pass: ScanPass) {
+  const changes = await detectChanges(prefetched, pass);
+  const tagReads = await withMissedReads(await prefetched.tagReads, changes);
+  if (changes.length) {
+    pass.db.transaction(() => recordChanges(changes, tagReads, pass));
+    pass.writes++;
+  }
+  await yieldToLoop(); // SQLite writes must not keep other server requests waiting across batches
+}
 
-const sameFingerprint = (row: FileRecord, onDisk: Fingerprint) =>
-  row.path === onDisk.path && contentLooksSame(row, onDisk) && row.ctime_ns === onDisk.ctime_ns;
+/** Compares a batch with the rows as they stand now, which an earlier batch may have changed. */
+async function detectChanges(prefetched: Prefetched, pass: ScanPass): Promise<Change[]> {
+  const { pathStats } = prefetched;
+  const rowsAreCurrent = prefetched.writes === pass.writes;
+  const paths = pathStats.map(({ path }) => path);
+  const rowsByPath = rowsAreCurrent ? prefetched.rowsByPath : rowsOf(pass.db, paths);
+  const detected = await Promise.all(
+    pathStats.map((entry) => detectChange(entry, rowsByPath.get(entry.path), pass)),
+  );
+  return detected.filter((change) => change !== null);
+}
+
+/** Counts a path and marks its row seen. Returns its change, or `null` if it has none. */
+async function detectChange(
+  { path, stats }: PathStats,
+  rowAtPath: FileRecord | undefined,
+  pass: ScanPass,
+): Promise<Change | null> {
+  const giveUp = (error: Error) => {
+    // A failed lstat never reached `seen`.
+    keepUnread(pass, pass.db.fileByPath(path) ?? rowAtPath, path, error.message);
+    return null;
+  };
+  if (stats instanceof Error) return giveUp(stats);
+  if (!stats?.isFile()) return null; // it can turn into a link after the walk saw it
+
+  pass.result.files++;
+  const onDisk = fingerprint(path, stats);
+  const prior = await priorRow(pass.db, onDisk, rowAtPath).catch((error: Error) => error);
+  if (prior instanceof Error) return giveUp(prior);
+  if (prior) pass.seen.add(prior.id);
+  const unchanged = prior && sameFingerprint(prior, onDisk);
+  return unchanged ? null : { onDisk, prior };
+}
 
 /** The row this path continues: its own, or that of a file that left its old path. */
-async function priorRow(
-  db: Db,
-  onDisk: Fingerprint,
-  rowAtPath: FileRecord | undefined,
-): Promise<FileRecord | undefined> {
+async function priorRow(db: Db, onDisk: Fingerprint, rowAtPath: FileRecord | undefined) {
   if (rowAtPath) return rowAtPath;
   for (const row of db.filesByInode(onDisk.dev, onDisk.ino)) {
     if (!(await ifExists(lstat(row.path)))) return row; // still there means a hard link
@@ -126,99 +323,26 @@ async function priorRow(
   return undefined;
 }
 
-/** A file that differs from the index. `prior` is unset for a file the index has not met. */
-interface Change {
-  onDisk: Fingerprint;
-  prior: FileRecord | undefined;
+/** Indexes tag reads by path, adding any change that the prefetch did not guess. */
+async function withMissedReads(prefetched: TagRead[], changes: Change[]) {
+  const readsByPath = new Map(prefetched.map((read) => [read.path, read]));
+  const changedPaths = changes.map(({ onDisk }) => onDisk.path);
+  const missed = changedPaths.filter((path) => !readsByPath.has(path));
+  for (const read of await readScanTags(missed)) readsByPath.set(read.path, read);
+  return readsByPath;
 }
 
-/** Keeps a row whose file could not be read: its old fingerprint stays, so the next scan retries. */
-function keepUnread(
-  { result, seen }: ScanPass,
-  row: FileRecord | undefined,
-  path: string,
-  reason: string,
-) {
-  if (row) seen.add(row.id);
-  result.warnings.push(`Could not read ${path}: ${reason}`);
-}
-
-const rowsOf = (db: Db, batch: string[]) =>
-  new Map(db.filesByPaths(batch).map((row) => [row.path, row]));
-
-/** What `lstat` said about a path: nothing for a file that is gone, or why it could not say. */
-type Stat = BigIntStats | undefined | Error;
-
-/** A batch on its way in: its paths, their `lstat`s, and tag reads already under way. */
-interface Prefetched {
-  batch: string[];
-  rowsByPath: Map<string, FileRecord>;
-  /** `ScanPass.writes` when the rows were read. */
-  writes: number;
-  stats: Stat[];
-  reads: Promise<TagRead[]>;
-}
-
-/**
- * Starts a batch's disk reads, so the tag worker runs during the previous batch's transaction. The
- * rows here may be one batch old, which is fine for guessing what to read: `scanBatch` decides what
- * a path is from the rows as they stand then, and reads whatever this missed.
- */
-async function prefetch(db: Db, batch: string[], pass: ScanPass): Promise<Prefetched> {
-  const rowsByPath = rowsOf(db, batch);
-  const { writes } = pass;
-  const stats = await Promise.all(
-    batch.map((path) => ifExists(lstat(path, { bigint: true })).catch((error: Error) => error)),
-  );
-  const changed = batch.filter((path, index) => {
-    const info = stats[index];
-    if (!info || info instanceof Error || !info.isFile()) return false;
-    const row = rowsByPath.get(path);
-    return !row || !sameFingerprint(row, fingerprint(path, info));
-  });
-  return { batch, rowsByPath, writes, stats, reads: readScanTags(changed) };
-}
-
-/** Counts a path and marks its row seen. Returns its change, or `null` if it has none. */
-async function detectChange(
-  db: Db,
-  path: string,
-  info: Stat,
-  rowAtPath: FileRecord | undefined,
-  pass: ScanPass,
-): Promise<Change | null> {
-  try {
-    if (info instanceof Error) throw info;
-    if (!info?.isFile()) return null; // it can turn into a link after the walk saw it
-    pass.result.files++;
-    const onDisk = fingerprint(path, info);
-    const prior = await priorRow(db, onDisk, rowAtPath);
-    if (prior) pass.seen.add(prior.id);
-    if (prior && sameFingerprint(prior, onDisk)) return null;
-    return { onDisk, prior };
-  } catch (error) {
-    // A failed lstat never reached `seen`.
-    keepUnread(pass, db.fileByPath(path) ?? rowAtPath, path, (error as Error).message);
-    return null;
+/** Records each change with its tag read. Synchronous, so that a batch is one transaction. */
+function recordChanges(changes: Change[], readsByPath: Map<string, TagRead>, pass: ScanPass) {
+  for (const change of changes) {
+    const read = readsByPath.get(change.onDisk.path)!;
+    if ('error' in read) keepUnread(pass, pass.db.fileByPath(read.path), read.path, read.error);
+    else recordChange(change, read.tags, pass);
   }
 }
 
-/** Handles tags gone from a file, as in docs/tags.md#lost-tags. Returns the new `restore` items. */
-export function recordRemoved(db: Db, id: number, removed: MirrorTag[], replaced: boolean): number {
-  if (!replaced) {
-    for (const { tag, ai } of removed) if (ai) db.rejectTag(id, tag, 'Removed by a person');
-    return 0;
-  }
-  let restores = 0;
-  for (const { tag } of removed) {
-    const item = { file_id: id, kind: 'restore', tag, confidence: null } as const;
-    if (db.addReview({ ...item, reason: 'Missing after the file was replaced' })) restores++;
-  }
-  return restores;
-}
-
-/** Writes one change to the index. Synchronous, so that a batch is one transaction. */
-function recordChange(db: Db, { onDisk, prior }: Change, tags: Tag[], { result, seen }: ScanPass) {
+/** Writes one change to the index. */
+function recordChange({ onDisk, prior }: Change, tags: Tag[], { db, result, seen }: ScanPass) {
   const replaced = prior !== undefined && prior.ino !== onDisk.ino;
   const edited = prior !== undefined && !contentLooksSame(prior, onDisk);
   const moved = prior !== undefined && prior.path !== onDisk.path;
@@ -238,71 +362,15 @@ function recordChange(db: Db, { onDisk, prior }: Change, tags: Tag[], { result, 
   result.ids.push(id);
 }
 
-/** Records each change with its tag read. */
-function recordChanges(db: Db, changes: Change[], reads: Map<string, TagRead>, pass: ScanPass) {
-  changes.forEach((change) => {
-    const read = reads.get(change.onDisk.path)!;
-    if ('error' in read) keepUnread(pass, db.fileByPath(read.path), read.path, read.error);
-    else recordChange(db, change, read.tags, pass);
-  });
-}
-
-/** Handles one batch: async reads first, since a transaction must not span an `await`. */
-async function scanBatch(db: Db, prefetched: Prefetched, pass: ScanPass) {
-  const { batch, stats, reads } = prefetched;
-  const rowsAreCurrent = prefetched.writes === pass.writes;
-  const rowsByPath = rowsAreCurrent ? prefetched.rowsByPath : rowsOf(db, batch);
-  const detected = await Promise.all(
-    batch.map((path, index) => detectChange(db, path, stats[index], rowsByPath.get(path), pass)),
-  );
-  const changes = detected.filter((change) => change !== null);
-  const tags = new Map((await reads).map((read) => [read.path, read]));
-  const missed = changes.map(({ onDisk }) => onDisk.path).filter((path) => !tags.has(path));
-  for (const read of await readScanTags(missed)) tags.set(read.path, read);
-  if (changes.length) {
-    db.transaction(() => recordChanges(db, changes, tags, pass));
-    pass.writes++;
-  }
-  await yieldToLoop(); // SQLite writes must not keep other server requests waiting across batches
-}
-
-/** Walks a library and indexes what it finds, a batch at a time. */
-async function walkAndIndex(
-  db: Db,
-  base: string,
-  excluded: Excluded,
-  onProgress?: OnProgress,
-): Promise<ScanPass> {
-  const pass = startPass();
-  let batch: string[] = [];
-  let previous: Prefetched | undefined;
-  const scanPrevious = async () => {
-    if (!previous) return;
-    await scanBatch(db, previous, pass);
-    const current = previous.batch.at(-1);
-    if (current !== undefined) onProgress?.({ done: pass.result.files, current });
-  };
-  const scanQueued = async () => {
-    const next = await prefetch(db, batch, pass);
-    await scanPrevious();
-    previous = next;
-    batch = [];
-  };
-  for await (const path of walk(base, excluded, pass)) {
-    batch.push(path);
-    if (batch.length >= BATCH_SIZE) await scanQueued();
-  }
-  await scanQueued();
-  await scanPrevious();
-  return pass;
+/** Keeps a row whose file could not be read: its old fingerprint stays, so the next scan retries. */
+function keepUnread(pass: ScanPass, row: FileRecord | undefined, path: string, reason: string) {
+  if (row) pass.seen.add(row.id);
+  pass.result.warnings.push(`Could not read ${path}: ${reason}`);
 }
 
 /** Deletes the rows of files the walk did not find. */
-function dropMissingRows(
-  db: Db,
-  indexed: { id: number; path: string }[],
-  { result, seen, unreadable }: ScanPass,
-) {
+function dropMissingRows(indexed: { id: number; path: string }[], pass: ScanPass) {
+  const { db, result, seen, unreadable } = pass;
   // What could not be listed may still exist, and its row holds history.
   const mayExist = (path: string) => unreadable.some((dir) => path.startsWith(dir + sep));
   db.transaction(() => {
@@ -315,86 +383,17 @@ function dropMissingRows(
   });
 }
 
-/**
- * Brings the index up to date with one library, and repairs any drift: the disk always wins. Never
- * writes to a file. Similarity numbers are left to the caller, once for all its libraries.
- */
-// shortcut: renaming a file and creating a new one at its old path raises false `restore` items,
-// which cost a click. Match inodes in a second pass if that proves common.
-export async function scanLibrary(
-  db: Db,
-  config: Config,
-  root: string,
-  onProgress?: OnProgress,
-): Promise<ScanResult> {
-  const base = resolve(root);
-  const baseInfo = await ifExists(stat(base));
-  // Going on would read an unplugged drive as every file deleted, losing provenance and history.
-  if (!baseInfo?.isDirectory()) throw new UserError(`${base} is not a folder that can be read`);
-
-  // A stored root can be, or become, a link to a secret folder.
-  const rootIsSecret = secretRoot(config, await realpath(base));
-  const excluded = rootIsSecret ? () => true : exclusions(config, base);
-  const pass = await walkAndIndex(db, base, excluded, onProgress);
-  const { result } = pass;
-
-  const indexed = db.filesUnder(base);
-  // An empty mount point looks like every file deleted, and the rows hold provenance and history.
-  // shortcut: a folder a person really emptied keeps its rows too, until `remove_library`.
-  const mayBeUnplugged = result.files === 0 && indexed.length > 0;
-  if (mayBeUnplugged) {
-    result.warnings.push(
-      `${base} has no files, but ${indexed.length} are indexed. Keeping them, in case a drive is unplugged`,
-    );
-    return result;
-  }
-  dropMissingRows(db, indexed, pass);
-  db.markScanned(base);
-  return result;
-}
-
 /** Splits watch events by what is on disk now, leaving out what is excluded. */
 async function classifyCandidates(candidates: string[], excluded: Excluded) {
   const gone: string[] = [];
   const files: string[] = [];
   let hasDirectory = false;
   for (const path of candidates) {
-    const info = await ifExists(lstat(path));
-    if (excluded(path, info?.isDirectory() ?? false)) continue;
-    if (!info) gone.push(path);
-    else if (info.isDirectory()) hasDirectory = true;
-    else if (info.isFile()) files.push(path);
+    const stats = await ifExists(lstat(path));
+    if (excluded(path, stats?.isDirectory() ?? false)) continue;
+    if (!stats) gone.push(path);
+    else if (stats.isDirectory()) hasDirectory = true;
+    else if (stats.isFile()) files.push(path);
   }
   return { gone, files, hasDirectory };
-}
-
-/**
- * Stats and compares only these paths, for `watch`. `needsWalk` is true when one was a directory or
- * a vanished indexed path: that can be a move, and only a full scan can tell a move from a delete.
- */
-export async function scanPaths(
-  db: Db,
-  config: Config,
-  root: string,
-  candidates: string[],
-): Promise<{ ids: number[]; needsWalk: boolean; warnings: string[] }> {
-  const base = resolve(root);
-  const excluded = exclusions(config, base);
-  const pass = startPass();
-  const { gone, files, hasDirectory } = await classifyCandidates(candidates, excluded);
-  for (let start = 0; start < files.length; start += BATCH_SIZE) {
-    await scanBatch(db, await prefetch(db, files.slice(start, start + BATCH_SIZE), pass), pass);
-  }
-  // After the files, so a rename seen whole in this batch has already moved its row.
-  const isIndexed = (path: string) => db.fileByPath(path) || db.filesUnder(path).length > 0;
-  const needsWalk = hasDirectory || gone.some(isIndexed);
-  return { ids: pass.result.ids, needsWalk, warnings: pass.result.warnings };
-}
-
-/**
- * Stores a file's fingerprint straight after the app wrote its tags, so the scan and the watcher
- * do not take the moved ctime for an outside change.
- */
-export async function recordWrite(db: Db, path: string): Promise<void> {
-  db.upsertFile(fingerprint(path, await lstat(path, { bigint: true })), { edited: false });
 }

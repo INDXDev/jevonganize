@@ -99,6 +99,7 @@ jevonganize/
 │   │   ├── db.ts         openDb: the one handle to the index
 │   │   ├── db/           All SQL, including similarity, one file per concern
 │   │   ├── scan.ts       Walk, fingerprint, mirror tags
+│   │   ├── fingerprint.ts What lstat says, compared with a row
 │   │   ├── exclusions.ts What is never read: secrets, app folders, `exclude`
 │   │   ├── watch.ts      fs.watch to scan
 │   │   ├── facets.ts     Load presets, map facets to questions
@@ -136,7 +137,7 @@ jevonganize/
 │   │   └── start.ts      Listen, open the browser
 │   ├── desktop/main.ts   The Electron shell
 │   └── web/              The React UI, see ui.md
-├── presets/              10 packs of facets, as TOML
+├── presets/              11 packs of facets, as TOML, and the topic catalog
 ├── test/                 <module>.test.ts, plus test/fixtures/
 ├── docs/
 ├── examples/messy-downloads/   A deliberately messy folder for demos
@@ -151,7 +152,7 @@ Dependencies point downward only. `.oxlintrc.json` enforces this, so a violation
 | --- | --- | --- |
 | Interface | `cli.ts`, `commands/`, `mcp.ts`, `server/`, `desktop/`, `web/` | The tool table, types, `config.ts`, `credentials.ts`, `ai/chat.ts`. `web/` uses types only |
 | Tools | `core/tools.ts`, `core/tools/` | Everything below |
-| Flows | `core/organize.ts`, `core/estimate.ts`, `core/plans.ts`, `core/plan-conflicts.ts`, `core/scan.ts`, `core/exclusions.ts`, `core/content-hash.ts`, `core/watch.ts` | Everything below |
+| Flows | `core/organize.ts`, `core/estimate.ts`, `core/plans.ts`, `core/plan-conflicts.ts`, `core/scan.ts`, `core/fingerprint.ts`, `core/exclusions.ts`, `core/content-hash.ts`, `core/watch.ts` | Everything below |
 | Engines | `extract/`, `ai/`, `core/facets.ts`, `core/facet-answers.ts` | Infrastructure, types |
 | Infrastructure | `core/config.ts`, `core/credentials.ts`, `core/db.ts`, `core/db/`, `core/tags.ts`, `core/sanitize.ts` | Types |
 | Contracts | `types.ts` | Nothing |

@@ -100,6 +100,7 @@ function printOrganized(plan: Plan, reviews: number): void {
 async function runOrganize(path: string, flags: OrganizeFlags) {
   if (flags.dryRun && flags.apply)
     throw new UserError(t('--dry-run and --apply cannot be combined'));
+  const apply = flags.apply ?? true;
   await withFlags(flags, async (ctx) => {
     const folder = indexedPath(path);
     await requireLibraryPath(folder, ctx);
@@ -129,9 +130,9 @@ async function runOrganize(path: string, flags: OrganizeFlags) {
     const plan = await callTool('get_plan', { id: final.plan_id }, ctx);
     if (!flags.json) {
       printOrganized(plan, (await callTool('status', {}, ctx)).reviews);
-      if (!flags.apply) nothingWritten(plan.id);
+      if (!apply) nothingWritten(plan.id);
     }
-    return flags.apply ? applyAndReport(ctx, plan.id, flags.json) : undefined;
+    return apply ? applyAndReport(ctx, plan.id, flags.json) : undefined;
   });
 }
 
@@ -375,6 +376,7 @@ export function addFileCommands(program: Command): void {
   command(program, 'organize <path>', t('Classify files and produce a plan'))
     .option('--dry-run', t('Print the estimate and stop'))
     .option('--apply', t('Apply the plan when it is ready'))
+    .option('--no-apply', t('Stop at the plan, and write no tags'))
     .option('--facets <ids>', t('Comma-separated facets or packs for this run'), commaList)
     .option('--limit <n>', t('Organize at most this many files'), Number)
     .action(runOrganize);

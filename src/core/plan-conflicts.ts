@@ -4,7 +4,7 @@
  * of those makes the op stale, and it fails rather than overwrite a later decision.
  */
 import type { Facet, Tag, TagOp } from '../types.ts';
-import { tagFacet } from './facets.ts';
+import { isName, tagFacet } from './facets.ts';
 
 /** What an organize op is checked against before it writes. */
 export interface ApplyRules {
@@ -24,7 +24,8 @@ function slotRival(tag: Tag, op: TagOp, diskTags: Tag[], facets: Facet[]): Tag |
 /** How many tags a file would hold after this op. */
 function tagCountAfter(op: TagOp, diskTags: Tag[]): number {
   const kept = diskTags.filter((tag) => !op.remove.includes(tag));
-  return kept.length + op.add.filter((tag) => !kept.includes(tag)).length;
+  return [...kept, ...op.add.filter((tag) => !kept.includes(tag))].filter((tag) => !isName(tag))
+    .length;
 }
 
 /** Why a tag this op adds is no longer wanted, or null. */
@@ -55,7 +56,8 @@ export function conflictReason(
   );
   if (personTag !== undefined) return `A person added ${personTag} after this plan was made`;
   const tagCount = tagCountAfter(op, diskTags);
-  const growsPastLimit = tagCount > maxTags && tagCount > diskTags.length;
+  const growsPastLimit =
+    tagCount > maxTags && tagCount > diskTags.filter((tag) => !isName(tag)).length;
   if (growsPastLimit) return `This would pass max_tags, with ${tagCount} tags`;
   return addedTagConflict(op, diskTags, indexed.rejected, facets);
 }

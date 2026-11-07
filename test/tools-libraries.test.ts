@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { UserError } from '../src/core/config.ts';
@@ -90,8 +90,18 @@ describe('libraries', () => {
     await mkdir(at('.hidden'));
     await writeFile(at('f.txt'), '');
     const result = await callTool('browse_dirs', { path: root }, ctx);
-    expect(result).toEqual({ path: root, parent: home(), dirs: ['a', 'b'] });
+    expect(result).toMatchObject({ path: root, parent: home() });
+    expect(result.places[0]).toBe(homedir());
+    const entries = result.entries.toSorted((x, y) => x.name.localeCompare(y.name));
+    expect(entries.map(({ name, dir }) => [name, dir])).toEqual([
+      ['.hidden', true],
+      ['a', true],
+      ['b', true],
+      ['f.txt', false],
+    ]);
+    expect(entries.at(-1)).toMatchObject({ size: 0, modified: expect.any(Number) });
     await expect(callTool('browse_dirs', { path: at('none') }, ctx)).rejects.toThrow(UserError);
+    await expect(callTool('browse_dirs', { path: at('f.txt') }, ctx)).rejects.toThrow(UserError);
   });
 });
 

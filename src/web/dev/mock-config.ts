@@ -118,7 +118,7 @@ export const initialConfig: Record<string, unknown> = {
   profiles: {},
   chat: { name: 'openai', model: 'gpt-6-luna' },
   facets: { enabled: ['core', 'time', 'sensitivity', 'media'], disabled: [] },
-  thresholds: { apply: 0.85, review: 0.5, estimated_to_review: true },
+  thresholds: { apply: 0.5, review: 0.5, estimated_to_review: true },
   budget: {
     text_chars: 8000,
     pdf_pages: 10,

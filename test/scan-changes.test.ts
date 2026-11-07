@@ -29,6 +29,16 @@ import {
 
 setupScanLibrary();
 
+/** Makes three folders with 600 files in the second, and names the two around them. */
+async function foldersAroundBulk() {
+  await Promise.all(['p', 'q', 'r'].map((name) => mkdir(at(name))));
+  // A walk takes folders as `readdir` gives them, so this puts the bulk between the outer two.
+  const folders = (await readdir(at())).filter((name) => name.length === 1);
+  const [first = '', middle = '', last = ''] = folders;
+  await Promise.all(Array.from({ length: 600 }, (_, n) => put(`${middle}/${n}.txt`)));
+  return { first, last };
+}
+
 describe('fingerprints of unchanged files and tag edits', () => {
   it('skips a file that did not change', async () => {
     await put('a.txt');
@@ -82,7 +92,7 @@ describe('fingerprints of unchanged files and tag edits', () => {
   );
 });
 
-describe('fingerprints of edits, renames and deletions', () => {
+describe('fingerprints of edits and renames', () => {
   it('a content change resets the status', async () => {
     const path = await put('a.txt');
     await scan();
@@ -107,7 +117,9 @@ describe('fingerprints of edits, renames and deletions', () => {
     expect(db.fileById(id)).toMatchObject({ path: at('b.txt'), status: 'organized' });
     expect(db.fileTags(id)).toEqual([{ tag: 't', ai: true }]);
   });
+});
 
+describe('fingerprints of hard links and batches', () => {
   it('a hard link is a second file, not a move', async () => {
     const path = await put('a.txt');
     await scan();
@@ -118,12 +130,9 @@ describe('fingerprints of edits, renames and deletions', () => {
 
   it('tells moves from hard links across batches, whose reads overlap', async () => {
     const path = await put('old/a.txt');
-    const id = db.fileByPath((await scan(), path))!.id;
-    await Promise.all(['p', 'q', 'r'].map((name) => mkdir(at(name))));
-    // A walk takes folders as `readdir` gives them, so this puts the bulk between the two links.
-    const folders = (await readdir(at())).filter((name) => name.length === 1);
-    const [first = '', middle = '', last = ''] = folders;
-    await Promise.all(Array.from({ length: 600 }, (_, n) => put(`${middle}/${n}.txt`)));
+    await scan();
+    const id = db.fileByPath(path)!.id;
+    const { first, last } = await foldersAroundBulk();
     await rename(path, at(first, 'one.txt'));
     execFileSync('ln', [at(first, 'one.txt'), at(last, 'two.txt')]);
     const result = await scan();
@@ -143,23 +152,23 @@ describe('fingerprints of edits, renames and deletions', () => {
       expect(db.fileTags(db.fileByPath(path)!.id).map(({ tag }) => tag)).toEqual([`tag:${n}`]);
     }
   });
+});
 
+describe('fingerprints of removed and unreadable rows', () => {
   it('a deleted file loses its row, and answers stay', async () => {
     const path = await put('a.txt');
     await put('keep.txt'); // a root left with no files at all keeps its rows
     await writeTags(path, ['t']);
     await scan();
-    db.putAnswer('k', 'f', []);
-    db.linkAnswer(db.fileByPath(path)!.id, 'f', 'k');
+    db.putAnswer('answer-key', 'facet', []);
+    db.linkAnswer(db.fileByPath(path)!.id, 'facet', 'answer-key');
     await rm(path);
     const result = await scan();
     expect(result.removed).toBe(1);
     expect(db.tagCounts()).toEqual([]);
-    expect(db.getAnswer('k')).toEqual([]);
+    expect(db.getAnswer('answer-key')).toEqual([]);
   });
-});
 
-describe('fingerprints of removed and unreadable rows', () => {
   it('reports a removed row as changed, so a watcher refreshes after a delete', async () => {
     const path = await put('a.txt');
     await put('b.txt');
@@ -214,10 +223,10 @@ describe('mirror drift', () => {
     await scan();
     await tick();
     await writeTags(path, ['t', 'u']);
-    const moved = await stat(path, { bigint: true });
+    const afterTagEdit = await stat(path, { bigint: true });
     await scan();
-    expect((await stat(path, { bigint: true })).ctimeNs).toBe(moved.ctimeNs);
-    expect(moved.mtimeNs).toBe(before.mtimeNs);
+    expect((await stat(path, { bigint: true })).ctimeNs).toBe(afterTagEdit.ctimeNs);
+    expect(afterTagEdit.mtimeNs).toBe(before.mtimeNs);
     expect(await readTags(path)).toEqual(['t', 'u']);
   });
 });

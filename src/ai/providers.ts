@@ -184,11 +184,14 @@ export async function resolveModel(config: Config, profile?: string): Promise<Re
   return { ...target, model };
 }
 
-/** Builds the `[chat]` model, which must generate text. */
-export async function resolveChatModel(config: Config): Promise<ResolvedChatModel> {
-  const provider = config.chat;
+/** Builds the `[chat]` model, or the `[ner]` one, which must generate text. */
+export async function resolveChatModel(
+  config: Config,
+  section: 'chat' | 'ner' = 'chat',
+): Promise<ResolvedChatModel> {
+  const provider = config[section];
   const build = PROVIDERS[provider.name].language;
-  if (!build) throw new UserError(`Provider "${provider.name}" cannot be used for [chat].`);
+  if (!build) throw new UserError(`Provider "${provider.name}" cannot be used for [${section}].`);
   const target = toTarget(provider);
   return { ...target, model: build(await keyFor(provider), target.modelId, provider) };
 }

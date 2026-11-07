@@ -8,6 +8,7 @@ import { UserError } from '../config.ts';
 import type { Db } from '../db.ts';
 import { loadFacets } from '../facets.ts';
 import { estimateRun } from '../estimate.ts';
+import { nameReader } from '../names.ts';
 import { facetsForRun, modelsForRun, organizeFiles } from '../organize.ts';
 import {
   applyPlan,
@@ -95,9 +96,10 @@ export const planTools = {
       const { db, config } = ctx;
       refuseIfOrganizing();
       const facets = await facetsForRun(db, config, input.facets);
+      const ner = await nameReader(config);
       const models = await modelsForRun(config, facets); // refuses here, before anything is sent
       return startJob('organize', ctx, async (run) => {
-        await organizeFiles({ db, config, facets, models }, input, run);
+        await organizeFiles({ db, config, facets, models, ner }, input, run);
         emitReviews(ctx);
       });
     },

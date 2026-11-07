@@ -52,7 +52,18 @@ test('end to end: scan, organize, apply, read from disk, undo', async () => {
 });
 
 describe('thresholds', () => {
-  test('the middle band goes to review, not the plan, and a low answer is dropped', async () => {
+  test('a middle answer joins the plan by default', async () => {
+    await writeFile(at('a.txt'), 'text');
+    await scan();
+    mock.doDecide = answering('invoice', 0.6);
+    const job = await organize();
+    const { ops } = await callTool('get_plan', { id: job.plan_id! }, ctx);
+    expect(ops[0]?.add).toEqual(['doc-type:invoice']);
+    expect(await callTool('list_reviews', {}, ctx)).toEqual([]);
+  });
+
+  test('with a raised apply, the middle band goes to review, not the plan', async () => {
+    ctx.config.thresholds.apply = 0.85;
     await writeFile(at('a.txt'), 'text');
     await scan();
     mock.doDecide = answering('invoice', 0.6);

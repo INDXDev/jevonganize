@@ -7,6 +7,7 @@ import { indexedPath, UserError } from '../core/config.ts';
 import { keySource } from '../core/credentials.ts';
 import type { Context } from '../core/tools.ts';
 import type { ProviderName } from '../types.ts';
+import { adoptTopics, picksLine } from './catalog.ts';
 import { askEnvConsent, readKey } from './settings.ts';
 import {
   callTool,
@@ -15,6 +16,7 @@ import {
   costLine,
   follow,
   type JsonFlag,
+  note,
   out,
   outJson,
   shown,
@@ -26,9 +28,12 @@ interface SetupFlags extends JsonFlag {
   folder?: string;
   packs?: string[];
   yes?: boolean;
+  /** Off with `--no-topics`. With `--yes`, it must be asked for. */
+  topics?: boolean;
 }
 
 const prompt = { output: process.stderr };
+/** As the UI's first run, so a huge folder cannot run up a bill before anyone has seen one. */
 
 function answered<T>(value: T): Exclude<T, symbol> {
   if (typeof value !== 'symbol') return value as Exclude<T, symbol>;
@@ -84,6 +89,10 @@ async function runSetup(flags: SetupFlags) {
     await callTool('add_library', { path }, ctx);
     await choosePacks(flags, ctx);
     const final = await follow(ctx, await callTool('scan', { path }, ctx));
+    const wanted = flags.topics ?? !flags.yes;
+    if (wanted && (await keySource(ctx.config.provider.name)) !== null) {
+      note(picksLine(await adoptTopics(path, ctx)));
+    }
     const estimate = await callTool('estimate', { query: { folder: path } }, ctx);
     if (flags.json) return outJson(estimate);
     out(
@@ -101,5 +110,7 @@ export function addSetupCommand(program: Command): void {
     .option('--folder <path>', t('Library to add'))
     .option('--packs <ids>', t('Comma-separated packs to enable'), commaList)
     .option('--yes', t('Ask nothing. Needs --folder'))
+    .option('--topics', t('Choose topics, even with --yes'))
+    .option('--no-topics', t('Skip choosing topics'))
     .action(runSetup);
 }

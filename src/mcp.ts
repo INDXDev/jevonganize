@@ -15,7 +15,7 @@ export function needsApproval(tool: ToolName, input: { id?: unknown }) {
   const runsPlan = tool === 'apply_plan' || tool === 'undo_plan';
   const plan = runsPlan || tool === 'discard_plan' ? String(input.id) : undefined;
   const command = tool === 'undo_plan' ? 'undo' : 'apply';
-  const spends = tool === 'organize' || tool === 'suggest_tags';
+  const spends = ['organize', 'suggest_tags', 'pick_topics'].includes(tool);
   return {
     status: 'needs_approval',
     tool,

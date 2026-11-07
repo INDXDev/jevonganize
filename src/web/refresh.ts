@@ -11,6 +11,7 @@ const FACETS: ToolName[] = ['list_facets', 'status', 'estimate', 'get_config'];
  */
 const REFRESHED: Partial<Record<ToolName, ToolName[]>> = {
   reveal_file: [],
+  open_file: [],
   scan: PLANS,
   organize: PLANS,
   apply_plan: PLANS,

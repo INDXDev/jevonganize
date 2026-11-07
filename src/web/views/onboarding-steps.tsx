@@ -3,6 +3,7 @@ import { ArrowRight, Check, FolderOpen, TriangleAlert } from 'lucide-react';
 import type { ReactNode, Ref } from 'react';
 import type { Estimate, Library } from '../../types.ts';
 import { SendNotice } from '../components/send-notice.tsx';
+import { TopicPicker } from '../components/topic-picker.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { Checkbox, Input } from '../components/ui/field.tsx';
 import { cn, formatCost, formatCount, keyLabel, shortPath } from '../lib.ts';
@@ -52,8 +53,12 @@ export function KeyStep(props: {
   value: string;
   onChange: (value: string) => void;
   onSave: () => void;
+  /** `OPENAI_API_KEY` is set, and can be used with one click. */
+  inEnv: boolean;
+  fromEnv: boolean;
+  onUseEnv: () => void;
 }) {
-  const { haveKey, value, onChange, onSave } = props;
+  const { haveKey, value, onChange, onSave, inEnv, fromEnv, onUseEnv } = props;
   const getKeyLink = (
     <a
       href="https://platform.openai.com/api-keys"
@@ -88,18 +93,27 @@ export function KeyStep(props: {
           </Button>
         </form>
       )}
+      {!haveKey && inEnv && (
+        <Button onClick={onUseEnv}>{t('Use OPENAI_API_KEY from the environment')}</Button>
+      )}
       <p className="text-xs text-subtle">
-        {haveKey
-          ? t('Stored in a file only you can read.')
-          : t('Without one, you can still scan and browse.')}
+        {!haveKey && t('Without one, you can still scan and browse.')}
+        {haveKey &&
+          (fromEnv ? t('Read from the environment.') : t('Stored in a file only you can read.'))}
       </p>
     </Step>
   );
 }
 
 /** Step 2: the chosen folder, with a warning when its volume cannot hold tags. */
-export function FolderStep(props: { library?: Library; usable: boolean; onChoose: () => void }) {
-  const { library, usable, onChoose } = props;
+export function FolderStep(props: {
+  library?: Library;
+  /** The count after the scan. `library` was read before the scan began. */
+  files?: number;
+  usable: boolean;
+  onChoose: () => void;
+}) {
+  const { library, files, usable, onChoose } = props;
   return (
     <Step n={2} title={t('Folder')} open done={usable}>
       <div className="flex items-center gap-2">
@@ -109,7 +123,7 @@ export function FolderStep(props: { library?: Library; usable: boolean; onChoose
         {library && (
           <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
             {shortPath(library.path)} ·{' '}
-            {t('{count} files found', { count: formatCount(library.files) })}
+            {t('{count} files found', { count: formatCount(files ?? library.files) })}
           </span>
         )}
       </div>
@@ -146,7 +160,31 @@ export function PacksStep(props: {
   );
 }
 
-/** Step 4: the send notice, and the choice to go past the first-run limit. */
+/** Step 4: the catalog. */
+export function TopicsStep(props: {
+  usable: boolean;
+  canChoose: boolean;
+  picking: boolean;
+  topics: string[];
+  onChange: (topics: string[]) => void;
+  onChoose: () => void;
+}) {
+  const { usable, canChoose, picking, topics, onChange, onChoose } = props;
+  return (
+    <Step n={4} title={t('Topics')} open={usable} done={topics.length > 0}>
+      <TopicPicker
+        topics={topics}
+        canChoose={canChoose}
+        picking={picking}
+        onAdd={(value) => onChange([...topics, value])}
+        onRemove={(value) => onChange(topics.filter((topic) => topic !== value))}
+        onChoose={onChoose}
+      />
+    </Step>
+  );
+}
+
+/** Step 5: the send notice, and the choice to go past the first-run limit. */
 export function CostStep(props: {
   usable: boolean;
   provider: string;
@@ -157,7 +195,7 @@ export function CostStep(props: {
 }) {
   const { usable, provider, estimate, wholeFolder, coverAll, onCoverAll } = props;
   return (
-    <Step n={4} title={t('Before you start')} open={usable}>
+    <Step n={5} title={t('Before you start')} open={usable}>
       <SendNotice estimate={estimate} provider={provider} />
       {wholeFolder && wholeFolder.files > FIRST_RUN && (
         <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -182,7 +220,7 @@ export function Intro() {
       <p className="mt-2 text-md text-muted-foreground">
         {' '}
         {t(
-          'It never moves, renames, edits or deletes a file. It only writes tags, and only after you approve a plan.',
+          'It never moves, renames, edits or deletes a file. It only writes tags, and every run can be undone.',
         )}{' '}
       </p>
     </header>

@@ -27,9 +27,10 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('PC language', () => {
-  test('macOS reads the preferred language from its plist, with no process', async () => {
-    platform('darwin');
+describe('PC language on macOS', () => {
+  beforeEach(() => platform('darwin'));
+
+  test('reads the preferred language from its plist, with no process', async () => {
     vi.stubEnv('LANG', 'en_US.UTF-8');
     vi.mocked(readFileSync).mockReturnValue(plist({ AppleLanguages: ['ja-JP', 'en-US'] }));
     expect(await detect()).toBe('ja');
@@ -40,15 +41,13 @@ describe('PC language', () => {
     ['no list', { AppleLocale: 'ja_JP' }],
     ['an empty list', { AppleLanguages: [] }],
     ['a list of something else', { AppleLanguages: [1] }],
-  ])('macOS asks `defaults` when the plist has %s', async (_name, value) => {
-    platform('darwin');
+  ])('asks `defaults` when the plist has %s', async (_name, value) => {
     vi.mocked(readFileSync).mockReturnValue(plist(value));
     vi.mocked(execFileSync).mockReturnValue('(\n    "zh-Hans-CN"\n)\n');
     expect(await detect()).toBe('zh-CN');
   });
 
-  test('macOS uses the preferred UI language even when the terminal locale is English', async () => {
-    platform('darwin');
+  test('uses the preferred UI language even when the terminal locale is English', async () => {
     vi.stubEnv('LANG', 'en_US.UTF-8');
     vi.mocked(execFileSync).mockReturnValue('(\n    "ja-JP",\n    "en-US"\n)\n');
     expect(await detect()).toBe('ja');
@@ -62,25 +61,40 @@ describe('PC language', () => {
     expect(execFileSync).toHaveBeenCalledTimes(1);
   });
 
+  test('native detection failures use the session locale', async () => {
+    vi.stubEnv('LC_MESSAGES', 'zh_TW.UTF-8');
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('restricted');
+    });
+    expect(await detect()).toBe('zh-CN');
+  });
+});
+
+describe('PC language on Windows', () => {
   test.each([
     [0x0411, 'ja'],
     [0x0804, 'zh-CN'],
     [0x0404, 'zh-CN'],
     [0x0409, 'en'],
     [0x040c, 'en'],
-  ])('Windows reads the native UI language ID %s', async (id, expected) => {
+  ])('reads the native UI language ID %s', async (id, expected) => {
     platform('win32');
-    const read = vi.fn<() => number>(() => id);
-    const func = vi.fn<() => typeof read>(() => read);
-    vi.mocked(koffi.load).mockReturnValue({ func } as unknown as ReturnType<typeof koffi.load>);
+    const readLanguageId = vi.fn<() => number>(() => id);
+    const declareFunction = vi.fn<() => typeof readLanguageId>(() => readLanguageId);
+    vi.mocked(koffi.load).mockReturnValue({ func: declareFunction } as unknown as ReturnType<
+      typeof koffi.load
+    >);
     expect(await detect()).toBe(expected);
     expect(koffi.load).toHaveBeenCalledWith('kernel32.dll');
-    expect(func).toHaveBeenCalledWith('uint16_t __stdcall GetUserDefaultUILanguage()');
+    expect(declareFunction).toHaveBeenCalledWith('uint16_t __stdcall GetUserDefaultUILanguage()');
     expect(execFileSync).not.toHaveBeenCalled();
   });
+});
 
-  test('Linux respects the session locale and never runs a command', async () => {
-    platform('linux');
+describe('PC language on Linux', () => {
+  beforeEach(() => platform('linux'));
+
+  test('respects the session locale and never runs a command', async () => {
     vi.stubEnv('LC_ALL', 'zh_CN.UTF-8');
     vi.stubEnv('LC_MESSAGES', 'ja_JP.UTF-8');
     vi.stubEnv('LANG', 'en_US.UTF-8');
@@ -89,8 +103,7 @@ describe('PC language', () => {
     expect(koffi.load).not.toHaveBeenCalled();
   });
 
-  test('Linux supports desktop LANGUAGE preference lists', async () => {
-    platform('linux');
+  test('supports desktop LANGUAGE preference lists', async () => {
     vi.stubEnv('LANGUAGE', 'ja_JP:en_US');
     vi.stubEnv('LC_MESSAGES', 'en_US.UTF-8');
     vi.stubEnv('LANG', 'en_US.UTF-8');
@@ -98,24 +111,16 @@ describe('PC language', () => {
   });
 
   test.each(['C', 'POSIX', 'C.UTF-8'])(
-    'Linux %s locale keeps the untranslated interface',
+    '%s locale keeps the untranslated interface',
     async (locale) => {
-      platform('linux');
       vi.stubEnv('LC_ALL', locale);
       vi.stubEnv('LANGUAGE', 'ja:zh');
       expect(await detect()).toBe('en');
     },
   );
+});
 
-  test('native detection failures use the session locale', async () => {
-    platform('darwin');
-    vi.stubEnv('LC_MESSAGES', 'zh_TW.UTF-8');
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('restricted');
-    });
-    expect(await detect()).toBe('zh-CN');
-  });
-
+describe('supportedLanguage', () => {
   test.each(['fr-FR', 'de_DE.UTF-8', 'C', 'POSIX', ''])(
     'unsupported %s falls back to English',
     async (locale) => {
