@@ -10,6 +10,7 @@ import * as plans from './db/plans.ts';
 import * as reviews from './db/reviews.ts';
 import { migrate, schemaVersion } from './db/schema.ts';
 import * as search from './db/search.ts';
+import * as tagRefresh from './db/tag-refresh.ts';
 import * as tags from './db/tags.ts';
 import * as vocabulary from './db/vocabulary.ts';
 
@@ -62,5 +63,6 @@ export function openDb(location: string = paths.database()) {
     ...bind(sql, reviews),
     ...bind(sql, plans),
     ...bind(sql, vocabulary),
+    ...bind(sql, tagRefresh),
   };
 }

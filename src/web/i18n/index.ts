@@ -2,12 +2,13 @@
 import { useSyncExternalStore } from 'react';
 import type { Language } from '../../types.ts';
 import { shell } from './shell.ts';
+import { refresh } from './refresh.ts';
 import { views } from './views.ts';
 
 /** A supported display language, after resolving the PC preference. */
 export type { Language } from '../../types.ts';
 
-const messages = { ...shell, ...views };
+const messages = { ...shell, ...views, ...refresh };
 type Message = keyof typeof messages;
 type Slots<S extends string> = S extends `${string}{${infer Name}}${infer Rest}`
   ? Name | Slots<Rest>

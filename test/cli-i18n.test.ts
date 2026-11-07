@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { getLanguage, t, withLanguage } from '../src/commands/i18n/index.ts';
 import { systemLanguage } from '../src/core/system-language.ts';
 import { messages } from '../src/commands/i18n/messages.ts';
+import { refreshMessages } from '../src/commands/i18n/refresh.ts';
 import { cli, home, ndjson, root, setupCliHome } from './cli-helpers.ts';
 
 setupCliHome();
@@ -79,7 +80,7 @@ describe('terminal languages', () => {
   });
 
   test('each translation preserves every named interpolation field', () => {
-    for (const [key, translations] of Object.entries(messages)) {
+    for (const [key, translations] of Object.entries({ ...messages, ...refreshMessages })) {
       for (const translation of translations) {
         expect(translation.trim()).not.toBe('');
         expect(fields(translation)).toEqual(fields(key));

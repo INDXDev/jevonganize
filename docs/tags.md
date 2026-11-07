@@ -179,6 +179,43 @@ errs towards keeping a tag, which is the safe direction.
 If a person removes an AI tag, the scan drops it from the mirror. The stored answer remains, so a
 later organize of that file can propose the tag again. It would appear in a plan, never silently.
 
+## Refreshing a tag
+
+A tag you add by hand, or one organize gave only some files, does not reach the rest of the library on
+its own. Refresh finds the files that lack it but look like the files that have it, checks them, and
+puts the likely ones in the review queue. It is the Refresh button on a tag, and `jevonganize refresh
+<tag>`. The tools are `refresh_candidates` and `refresh_tag`; [contracts.md](contracts.md#the-tool-table)
+holds the exact rules.
+
+1. **Learn from the tagged files.** Up to 200 files with the tag, or a child of it, most recently
+   modified first.
+2. **Find candidates, locally and for free.** Three signals point at files without the tag:
+   - Words: those common in the tagged files' searchable text and rare across the index, a small
+     TF-IDF. The full-text index finds files holding them, and the tag's own words count too.
+     Japanese and Chinese words of two characters are joined into compounds such as 請求書, since
+     the trigram index needs three.
+   - Tags that go with it: tags on its files more often than chance, weighted by how often they go
+     with it and by the IDF that [similarity](storage.md) uses.
+   - Similar files: the nearest neighbours of the first 10 tagged files.
+
+   A word of the tag in a file name adds a little. The best 50 make the list, 200 at most.
+3. **Skip what was handled.** A file with any review item for the tag, open, accepted or rejected, is
+   out. So is a file with another value of the tag's facet, when that facet holds one value per file,
+   and a file whose unchanged content was already checked for this tag.
+4. **Estimate**, as organize does, before anything is sent.
+5. **Check each candidate with the decision model**: one yes-or-no question, whether the file should
+   carry the tag, with the facet's own definition when the tag is a facet label. This is the
+   `[provider]` model organize uses, or the facet's profile, never the chat or names model. Answers
+   are cached, so the same content is never paid for twice.
+6. **Review.** A yes at or above `thresholds.review` becomes a review item, with a reason naming the
+   signals that found it. Accepting builds a plan, and applying it writes the tag with `ai = 0`, as
+   any accepted review item. Rejecting keeps the file out of later refreshes.
+
+Nothing is written to a file until a person accepts.
+
+Only organized files have searchable text, so the words signal finds only those. A file that was never
+organized is read when it is checked.
+
 ## Lost tags
 
 Many apps save by writing a temp file and renaming it over the original. That gives the file a new

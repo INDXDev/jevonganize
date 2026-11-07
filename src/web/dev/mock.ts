@@ -247,6 +247,44 @@ const tools: { [K in ToolName]: (input: ToolMap[K][0]) => ToolMap[K][1] } = {
     return made;
   },
   suggest_tags: () => [],
+  refresh_candidates: ({ tag, limit = 50 }) => {
+    const candidates = files
+      .filter((f) => !f.tags.includes(tag))
+      .slice(0, Math.min(limit, 12))
+      .map((f, i) => ({
+        ...f,
+        score: 0.9 - i * 0.05,
+        signals: {
+          terms: ['invoice', 'total'].slice(0, 1 + (i % 2)),
+          tags: i % 3 === 0 ? ['party:acme'] : [],
+          similar: i % 2 ? 0.4 : 0,
+          name: i % 4 === 0,
+        },
+      }));
+    return {
+      tag,
+      tagged: 14,
+      seeds: 14,
+      terms: ['invoice', 'total', 'due'],
+      tags: ['party:acme'],
+      candidates,
+      checked: 3,
+      estimate: {
+        files: candidates.length,
+        cached: 0,
+        facets: 1,
+        tokens: candidates.length * 2100,
+        cost_usd: candidates.length * 0.0002,
+        provider: 'openai',
+        model: 'gpt-6-luna',
+      },
+    };
+  },
+  refresh_tag: ({ tag, file_ids = [] }) =>
+    runJob('refresh', Math.max(file_ids.length, 1), () => ({
+      tag,
+      reviews: Math.ceil(file_ids.length / 3),
+    })),
   search_catalog: ({ text }) =>
     [
       'finance/budgeting',

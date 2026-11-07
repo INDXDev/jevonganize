@@ -58,6 +58,8 @@ it, so neither imports the other.
 | `list_reviews` | `tag?`, `limit?` | open `ReviewItem[]`, ordered by tag, then confidence | no | yes |
 | `resolve_reviews` | `ids`, `accept` | `Plan` of the accepted items, or `null` | stores a plan | yes, with approval |
 | `suggest_tags` | `id` | candidate tags, as review items | yes | yes, with approval |
+| `refresh_candidates` | `tag`, `limit?` (50, at most 200) | `RefreshCandidates`: files that lack the tag but look like its files, best first, with their signals and an estimate. Calls no model | no | yes |
+| `refresh_tag` | `tag`, `limit?`, `file_ids?` | `Job`: asks the decision model about each candidate, and adds the yeses as review items. Writes no tag | yes | yes, with approval |
 | `search_catalog` | `text`, `limit?` | catalog values containing the text | no | yes |
 | `pick_topics` | `query`, `limit?` (100) | `TopicPicks`: the likeliest catalog values for the file names. Changes nothing | no | yes, with approval |
 | `list_vocabulary` | `facet?` | `VocabularyEntry[]`: values of open facets | no | yes |
@@ -88,9 +90,9 @@ Every tool has a place in the UI, which `test/tools.test.ts` checks. See
 `agent: false` is a security boundary. A model must never reach keys or config, or add folders.
 `apply_plan` takes only an id, so what a person saw is exactly what runs. Tools that start a job
 return it at once. `Job.failed`, `Job.warnings` and `Job.scan` carry what a finished job found, so
-front ends need no second call. `organize` and
-`suggest_tags` need approval because they spend money and send content to a provider, and a
-hostile file name could steer a model into calling them. `resolve_reviews` and `discard_plan` need
+front ends need no second call. `organize`,
+`suggest_tags` and `refresh_tag` need approval because they spend money and send content to a
+provider, and a hostile file name could steer a model into calling them. `resolve_reviews` and `discard_plan` need
 it because they drop what only a person should drop: a `restore` item is the one record of a lost
 tag. The CLI and the UI are people, so they are not gated.
 
@@ -109,6 +111,30 @@ them into the final plan, so undo covers both runs. Until then it cannot be disc
 `undo_plan` finishes as `undone` only when every op is reversed. Cancelled or partly failed, the plan
 stays `applied` and holds only the unfinished ops, so `undo_plan` can run again. It restores tags with
 `ai = 1` for an organize plan, and clears the tombstone of each tag it puts back.
+
+**Refreshing a tag.** `refresh_candidates` and `refresh_tag` spread a tag `T` to files that lack it
+but look like the files that have it. See [tags.md](tags.md#refreshing-a-tag).
+
+- Seeds are the files with `T` or a child of it, up to 200, most recently modified first.
+- Candidates are files without `T` or a child, with no `suggest` review row for `T` in any state, and,
+  when `T` is a label of a `choice`, `level`, `date` or `field` facet, with no other value of that
+  facet. Paths that may not be read, as for `organize`, are left out.
+- Three local signals rank them, each from 0 to 1: the share of the seeds' characteristic words a
+  file's searchable text holds (40%), the share of the weight of tags that go with `T` a file has
+  (30%), and its highest `similar_files` score to one of the first 10 seeds (20%). A word of `T`'s
+  value in the file name adds 10%. Ties break by file id, so the order is stable.
+- A candidate whose stored `state_hash` already has a valid answer to the refresh question is left
+  out and counted in `checked`. A file that was never organized has no stored state, so it stays a
+  candidate, and its answer comes from the cache for free once read.
+- `refresh_tag` refuses with no key before reading anything, like `organize`. With `file_ids` it
+  checks only those of the top 200 candidates. It asks the decision model of `T`'s facet profile, or
+  the default `[provider]`, never `[chat]` or `[ner]`. The question is one `flag`: whether the file
+  should carry `T`, with the facet's own instructions and the label's definition when `T` is a facet
+  label. Its answer is cached under the usual answer key, with `facetHash` of that question, so a
+  changed facet definition asks again. The model returns only a probability.
+- A yes at or above `thresholds.review` becomes a `suggest` review item for `T`, with a reason naming
+  the signals. The items are stored when the job ends, so a cancelled run leaves none. `Job.reviews`
+  counts them, and `Job.tag` is `T`.
 
 Rejecting a `suggest` item keeps it as `rejected`, so a cached answer cannot bring it back. Accepting
 or rejecting a `restore` item deletes it, so the next loss of that tag raises a new one. Accepting

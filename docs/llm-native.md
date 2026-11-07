@@ -17,16 +17,16 @@ Tools with `agent: true` are offered to chat and MCP. Tools with `agent: false` 
 
 | Group | Tools |
 | --- | --- |
-| Read | `status`, `list_libraries`, `search_files`, `get_file`, `similar_files`, `list_tags`, `list_facets`, `list_vocabulary`, `search_catalog`, `estimate`, `get_plan`, `list_plans`, `list_reviews`, `cleanup_report`, `doctor` |
+| Read | `status`, `list_libraries`, `search_files`, `get_file`, `similar_files`, `list_tags`, `list_facets`, `list_vocabulary`, `search_catalog`, `estimate`, `get_plan`, `list_plans`, `list_reviews`, `cleanup_report`, `refresh_candidates`, `doctor` |
 | Propose (stores a plan) | `propose_changes`, `rename_tag` |
 | Run (local, no tags written) | `scan` |
-| Needs approval | `apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `pick_topics`, `resolve_reviews`, `discard_plan` |
+| Needs approval | `apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `refresh_tag`, `pick_topics`, `resolve_reviews`, `discard_plan` |
 | Never offered | `add_library`, `remove_library`, `browse_dirs`, `save_facet`, `delete_facet`, `set_enabled`, `set_vocabulary`, `cancel_job`, `get_config`, `set_config`, `list_keys`, `set_api_key`, `remove_api_key`, `set_env_keys`, `reveal_file`, `open_file` |
 
 The last row is a security boundary. A model cannot reach keys or config, add a folder, or browse the
 disk. It sees only what is already in a library.
 
-`organize` and `suggest_tags` write no tags, but they need approval because they send file data to
+`organize`, `suggest_tags` and `refresh_tag` write no tags, but they need approval because they send file data to
 your provider and cost money. A hostile file name must not be able to start that. `resolve_reviews`
 and `discard_plan` need it because they can delete work only a person should drop, such as the
 `restore` item that is the last record of a lost tag.
@@ -44,8 +44,8 @@ Every bulk change is stored first and runs later, in this order.
 
 ## Approval gate
 
-`apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `resolve_reviews` and `discard_plan` have
-`approval: true`. Nothing a model says can skip this, because the check is in the front end and not in the prompt.
+`apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `refresh_tag`, `resolve_reviews` and
+`discard_plan` have `approval: true`. Nothing a model says can skip this, because the check is in the front end and not in the prompt.
 
 | Front end | What happens when a model calls one |
 | --- | --- |
@@ -62,7 +62,7 @@ The MCP result, as text content in the tool response:
   "message": "A person must approve this in Jevonganize's Review queue, or with: jevonganize apply 7f3a9c21" }
 ```
 
-`organize`, `suggest_tags` and `resolve_reviews` have no plan yet, so their result leaves out
+`organize`, `suggest_tags`, `refresh_tag` and `resolve_reviews` have no plan yet, so their result leaves out
 `plan_id`. `resolve_reviews` and `discard_plan` point to the Review queue, where a person decides.
 
 ### Limits of the gate

@@ -198,7 +198,7 @@ export interface Library {
 /** A named background operation. */
 export interface Job {
   id: string;
-  kind: 'scan' | 'organize' | 'apply' | 'undo';
+  kind: 'scan' | 'organize' | 'apply' | 'undo' | 'refresh';
   status: 'running' | 'done' | 'failed' | 'cancelled';
   /** Milliseconds since the epoch, like `Plan.created_at`. */
   started_at: number;
@@ -211,6 +211,10 @@ export interface Job {
   cost_usd?: number | null;
   /** The plan an `organize` job produced, or the one an `apply` or `undo` job works on. */
   plan_id?: string;
+  /** The tag a `refresh` job spreads. */
+  tag?: Tag;
+  /** Review items a `refresh` job added. */
+  reviews?: number;
   /** Files or ops that failed. The job goes on, so it can end `done` with some. */
   failed?: number;
   /** For people, set when the job ends. */
@@ -309,6 +313,44 @@ export interface CleanupReport {
   over_broad: TagCount[];
 }
 
+/** Why `refresh_candidates` chose a file. Every signal is computed locally. */
+export interface RefreshSignals {
+  /** Characteristic words of the tagged files that this file's text holds. */
+  terms: string[];
+  /** Tags that go with the tag, which this file has. */
+  tags: Tag[];
+  /** The highest similarity to a tagged file, 0 to 1. */
+  similar: number;
+  /** A word of the tag's value is in the file name. */
+  name: boolean;
+}
+
+/** A file that lacks a tag but looks like the files that have it. */
+export interface RefreshCandidate extends FileRow {
+  /** 0 to 1, the signals combined. */
+  score: number;
+  signals: RefreshSignals;
+}
+
+/** What `refresh_candidates` found for a tag. No model was asked. */
+export interface RefreshCandidates {
+  tag: Tag;
+  /** Files with the tag, or a child of it. */
+  tagged: number;
+  /** How many of them the search learned from. */
+  seeds: number;
+  /** The characteristic words it searched for. */
+  terms: string[];
+  /** The tags that go with this one. */
+  tags: Tag[];
+  /** Best first. */
+  candidates: RefreshCandidate[];
+  /** Files left out because their unchanged content was already checked for this tag. */
+  checked: number;
+  /** What checking `candidates` with the decision model would cost. */
+  estimate: Estimate;
+}
+
 type ChangeScope = { query?: FileQuery; file_ids?: number[] };
 
 /** Every tool's input and output, as `[input, output]`. docs/contracts.md describes each one. */
@@ -343,6 +385,8 @@ export interface ToolMap {
   list_reviews: [{ tag?: Tag; limit?: number }, ReviewItem[]];
   resolve_reviews: [{ ids: number[]; accept: boolean }, Plan | null];
   suggest_tags: [{ id: number }, ReviewItem[]];
+  refresh_candidates: [{ tag: Tag; limit?: number }, RefreshCandidates];
+  refresh_tag: [{ tag: Tag; limit?: number; file_ids?: number[] }, Job];
   set_vocabulary: [{ facet: string; value: string; state: 'active' | 'retired' }, void];
   cleanup_report: [Record<string, never>, CleanupReport];
   list_vocabulary: [{ facet?: string }, VocabularyEntry[]];

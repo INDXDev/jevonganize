@@ -54,6 +54,11 @@ differ by who reads the file.
    [pipeline.md](pipeline.md#how-the-model-state-is-assembled).
 3. **Plan approval.** High confidence only joins a plan. A person applies it.
 
+Refreshing a tag asks a decision model too, with the same delimiters. Its one question quotes the tag,
+which may itself have come from a file, so a hostile tag can word the question. The answer is still
+only a probability, it can only ever propose that one tag, and every yes waits in the review queue
+for a person. So **a hostile file or tag can at worst fill the review queue**.
+
 Together these mean that **a file can at worst mislabel itself, and only within the schema's labels.**
 It cannot invent a tag, touch another file, run anything, or reach a tool. A decision model has no
 tools.
@@ -79,7 +84,7 @@ The closed-output limit does not apply here, and this section says what does.
   contains**, and nothing more. Models still need approval to call `organize`, because it spends money.
 - **Chat.** A chat model writes free text, and it reads file names, metadata and tags through tools. So
   a hostile name can steer it. It cannot apply anything or spend money, because `apply_plan`,
-  `undo_plan`, `organize`, `suggest_tags` and `pick_topics` need approval. It cannot delete a `restore` item or a
+  `undo_plan`, `organize`, `suggest_tags`, `refresh_tag` and `pick_topics` need approval. It cannot delete a `restore` item or a
   proposed plan, because `resolve_reviews` and `discard_plan` need approval too. It cannot reach keys
   or config, because those tools have `agent: false`. And `apply_plan` takes only an id, so a plan
   cannot change after you see it.
@@ -98,11 +103,12 @@ at the terminal boundary.
 | Action | Sent | To |
 | --- | --- | --- |
 | `scan`, `watch`, `search`, `show`, `similar`, `tags list`, `review`, `cleanup`, `doctor`, browsing | Nothing | |
-| `organize --dry-run`, `estimate` | Nothing | |
+| `organize --dry-run`, `estimate`, `refresh --dry-run`, `refresh_candidates` | Nothing | |
 | `apply`, `undo`, tag changes | Nothing | |
 | `organize` | Per file: its name but not its folder path, up to `budget.text_chars` of text, up to `budget.images` images (none with `send_images = false`), metadata, and the facet questions | `[provider]`, plus any profile a facet names |
 | `suggest`, suggestions in the UI | The same state, and your tag vocabulary | `[chat]` |
 | Verifying a suggestion | The same state again, and one yes-or-no question per candidate tag | `[provider]` |
+| `refresh`, Refresh on a tag | Per candidate file, the same state as `organize`, and one yes-or-no question naming the tag. Finding candidates, and `--dry-run`, send nothing | `[provider]`, or the profile the tag's facet names |
 | Chat panel, `ask` | Your messages, and tool output: names, paths, tags, metadata, answers. No file text | `[chat]` |
 | MCP | Tool output, as above | The client's own model. Jevonganize does not choose it |
 

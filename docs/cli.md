@@ -52,6 +52,7 @@ files.
 | `similar` | `similar_files` |
 | `review` | `list_reviews`, `resolve_reviews`, `apply_plan` |
 | `suggest` | `suggest_tags` |
+| `refresh` | `refresh_candidates`, `refresh_tag` (unless `--dry-run`) |
 | `topics pick` | `add_library` and `scan` (for a new path), `pick_topics`, `set_vocabulary` |
 | `topics search` | `search_catalog` |
 | `topics add` | `set_vocabulary` |
@@ -342,6 +343,35 @@ Added 2 review items:
   319  party:acme-corp
 ```
 
+## `jevonganize refresh <tag>`
+
+Finds files that lack a tag but look like the files that have it, asks the `[provider]` decision
+model whether each one should carry it, and adds the yeses to the review queue. Finding them is
+local and free. Checking them sends each file's extracted state, as `organize` does. It writes no
+tag: accept the items with `review`. See [Refreshing a tag](tags.md#refreshing-a-tag).
+
+| Flag | Description |
+| --- | --- |
+| `--limit <n>` | Check at most this many files. 50 by default, at most 200 |
+| `--dry-run` | List the candidates and the estimate, and stop. Sends nothing and needs no key |
+
+`--json` prints the candidates with `--dry-run`, and the job as NDJSON otherwise.
+
+```text
+$ jevonganize refresh doc-type:invoice --dry-run
+doc-type:invoice: 14 files have it, 3 candidates, 2 already checked
+  0.62  ~/Downloads/scan-0102.pdf  invoice total due party:acme
+  0.41  ~/Downloads/IMG_3001.jpg  party:acme similar 0.48
+  0.10  ~/Downloads/invoice-old.txt  name
+About 2.1K tokens, about $0.00 on openai gpt-6-luna
+Nothing was sent.
+
+$ jevonganize refresh doc-type:invoice
+doc-type:invoice: 14 files have it, 3 candidates, 2 already checked
+  ...
+2 files to review: jevonganize review --tag doc-type:invoice
+```
+
 ## `jevonganize topics`
 
 ```sh
@@ -472,4 +502,4 @@ this command, so you rarely run it yourself. See [llm-native.md](llm-native.md#m
 
 | Flag | Description |
 | --- | --- |
-| `--allow-apply` | Let `apply_plan`, `undo_plan`, `organize`, `suggest_tags` and `pick_topics` run with no person. Off by default |
+| `--allow-apply` | Let `apply_plan`, `undo_plan`, `organize`, `suggest_tags`, `refresh_tag` and `pick_topics` run with no person. Off by default |
